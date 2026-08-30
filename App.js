@@ -23,11 +23,12 @@ Notifications.setNotificationHandler({
 });
 
 const EVENTOS_FIXOS_INICIAIS = [
-  { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:05', tipo: 'ponto', ativo: true },
-  { id: '2', nome: 'Interserver Double', inicio: '07:00', fim: '11:00', tipo: 'duracao', ativo: true },
-  { id: '3', nome: 'Transporte Duplo', inicio: '09:00', fim: '10:00', tipo: 'duracao', ativo: true },
-  { id: '4', nome: 'Boss', inicio: '16:00', fim: '16:05', tipo: 'ponto', ativo: true },
-  { id: '5', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true },
+  { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '2', nome: 'Interserver Double', inicio: '07:00', fim: '11:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '3', nome: 'Transporte Duplo', inicio: '09:00', fim: '10:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '4', nome: 'GuildasXGuildas', inicio: '15:30', fim: '15:35', tipo: 'ponto', ativo: true, dias: [6], aviso: 'A GvG irá iniciar em breve!' },
+  { id: '5', nome: 'Boss', inicio: '16:00', fim: '16:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '6', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
 ];
 
 const DIAS_SLOTS = [
@@ -35,8 +36,8 @@ const DIAS_SLOTS = [
   'Qui1', 'Qui2', 'Sex1', 'Sex2', 'Sab1', 'Sab2', 'Dom1', 'Dom2'
 ];
 
-const COOLDOWN_1H01 = 61 * 60; // 1 hora e 1 minuto (3660s)
-const COOLDOWN_24H = 24 * 60 * 60; // 24 horas (86400s)
+const COOLDOWN_1H01 = 61 * 60; // 1h01m em segundos
+const COOLDOWN_24H = 24 * 60 * 60; // 24h em segundos
 
 export default function App() {
   const [abaInferior, setAbaInferior] = useState('gerador');
@@ -44,10 +45,10 @@ export default function App() {
   const [eventos, setEventos] = useState(EVENTOS_FIXOS_INICIAIS);
   const [agora, setAgora] = useState(new Date());
 
-  // Estados dos temporizadores da aba Sistema
+  // Cooldowns da aba Sistema
   const [cooldowns, setCooldowns] = useState({});
 
-  // Estados da aba Customizável
+  // Form da aba Customizável
   const [eventosCustom, setEventosCustom] = useState([]);
   const [novoNome, setNovoNome] = useState('');
   const [novoHorario, setNovoHorario] = useState('');
@@ -55,11 +56,35 @@ export default function App() {
   useEffect(() => {
     configurarNotificacoes();
     const timer = setInterval(() => {
-      setAgora(new Date());
-      atualizarTemporizadores();
+      const agoraAtual = new Date();
+      setAgora(agoraAtual);
+
+      const agoraMs = agoraAtual.getTime();
+      setCooldowns(prev => {
+        let mudou = false;
+        const novos = { ...prev };
+
+        Object.keys(novos).forEach(key => {
+          const item = novos[key];
+          if (item && item.ativo) {
+            const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
+            if (restante !== item.tempoRestante) {
+              mudou = true;
+              novos[key] = {
+                ...item,
+                tempoRestante: restante,
+                ativo: restante > 0
+              };
+            }
+          }
+        });
+
+        return mudou ? novos : prev;
+      });
     }, 1000);
+
     return () => clearInterval(timer);
-  }, [cooldowns]);
+  }, []);
 
   async function configurarNotificacoes() {
     const { status } = await Notifications.getPermissionsAsync();
@@ -84,27 +109,6 @@ export default function App() {
     if (id) await Notifications.cancelScheduledNotificationAsync(id);
   }
 
-  function atualizarTemporizadores() {
-    const agoraMs = Date.now();
-    let mudou = false;
-    const novosCooldowns = { ...cooldowns };
-
-    Object.keys(novosCooldowns).forEach(key => {
-      const item = novosCooldowns[key];
-      if (item && item.ativo) {
-        const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
-        if (restante !== item.tempoRestante) {
-          mudou = true;
-          novosCooldowns[key].tempoRestante = restante;
-          if (restante === 0) novosCooldowns[key].ativo = false;
-        }
-      }
-    });
-
-    if (mudou) setCooldowns(novosCooldowns);
-  }
-
-  // Toggle do timer de 1h01m para qualquer Slot
   async function alternarCooldown1h(slot) {
     const key = `${slot}_1h`;
     const estadoAtual = cooldowns[key];
@@ -130,7 +134,6 @@ export default function App() {
     }
   }
 
-  // Toggle do timer de 24h exclusivo para slots final 1
   async function alternarCooldown24h(slot) {
     const key = `${slot}_24h`;
     const estadoAtual = cooldowns[key];
@@ -156,8 +159,7 @@ export default function App() {
     }
   }
 
-  // Adicionar Evento Customizado
-  async function adicionarEventoCustom() {
+  function adicionarEventoCustom() {
     if (!novoNome.trim() || !novoHorario.trim()) {
       Alert.alert("Atenção", "Preencha o nome e o horário do evento.");
       return;
@@ -167,7 +169,6 @@ export default function App() {
       id: Date.now().toString(),
       nome: novoNome.trim(),
       horario: novoHorario.trim(),
-      ativo: true,
     };
 
     setEventosCustom(prev => [...prev, novo]);
@@ -179,17 +180,21 @@ export default function App() {
     setEventosCustom(prev => prev.filter(ev => ev.id !== id));
   }
 
-  // Cálculo da Timeline com Segundos Exibidos
   function getMinutos(horarioStr) {
     const [h, m] = horarioStr.split(':').map(Number);
     return h * 60 + m;
   }
 
-  function getStatusEvento(inicioStr, fimStr, tipo) {
+  function getStatusEvento(ev) {
+    const diaAtual = agora.getDay(); // 0 = Domingo, 6 = Sábado
+    if (ev.dias && !ev.dias.includes(diaAtual)) {
+      return { status: 'HOJE NÃO', cor: '#475569' };
+    }
+
     const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
     const segundosAtuais = agora.getSeconds();
-    const iniMin = getMinutos(inicioStr);
-    const fimMin = tipo === 'duracao' ? getMinutos(fimStr) : iniMin + 5;
+    const iniMin = getMinutos(ev.inicio);
+    const fimMin = ev.tipo === 'duracao' ? getMinutos(ev.fim) : iniMin + 5;
 
     if (minutosAtuais >= iniMin && minutosAtuais < fimMin) {
       return { status: 'EM ANDAMENTO', cor: '#10B981' };
@@ -204,7 +209,7 @@ export default function App() {
     const m = Math.floor((diffMinutosTotal % 3600) / 60);
     const s = diffMinutosTotal % 60;
 
-    let textoTempo = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+    const textoTempo = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
     return { status: `Próximo (em ${textoTempo})`, cor: '#EAB308' };
   }
 
@@ -219,7 +224,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
 
-      {/* Header Atualizado */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerEmoji}>🛡️</Text>
@@ -258,18 +263,21 @@ export default function App() {
 
             {/* ABA FIXOS */}
             {subAba === 'fixos' && (
-              <>
+              <View>
                 <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
                 <View style={styles.timelineBox}>
                   {eventos.map(ev => {
-                    const infoStatus = getStatusEvento(ev.inicio, ev.fim, ev.tipo);
+                    const infoStatus = getStatusEvento(ev);
                     return (
                       <View key={ev.id} style={styles.cardTimeline}>
-                        <View>
+                        <View style={{ flex: 1 }}>
                           <Text style={styles.cardTitulo}>{ev.nome}</Text>
                           <Text style={styles.cardHorario}>
                             ⏰ {ev.tipo === 'duracao' ? `${ev.inicio} - ${ev.fim}` : ev.inicio}
                           </Text>
+                          {ev.aviso && (
+                            <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
+                          )}
                         </View>
                         <View style={[styles.badgeStatus, { backgroundColor: infoStatus.cor }]}>
                           <Text style={styles.badgeStatusTexto}>{infoStatus.status}</Text>
@@ -296,7 +304,7 @@ export default function App() {
                       <Text style={styles.cardSub}>
                         Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
                       </Text>
-                      <Text style={styles.cardNotiInfo}>⚡ Notifica diariamente 5m antes</Text>
+                      <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
                     </View>
                     <Switch
                       value={ev.ativo}
@@ -306,15 +314,15 @@ export default function App() {
                     />
                   </View>
                 ))}
-              </>
+              </View>
             )}
 
-            {/* ABA SISTEMA: SLOTS 1H01M E 24H */}
+            {/* ABA SISTEMA */}
             {subAba === 'sistema' && (
               <View>
                 <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
                 <Text style={styles.subTituloInstrucao}>
-                  Nos slots final 1 você pode ativar tanto o timer de 1h01m quanto o timer de 24h.
+                  Slots final 1 possuem o controle adicional de 24h.
                 </Text>
 
                 {DIAS_SLOTS.map(slot => {
@@ -326,7 +334,6 @@ export default function App() {
                     <View key={slot} style={styles.cardSystemSlot}>
                       <Text style={styles.cardTitulo}>Slot {slot}</Text>
 
-                      {/* Control 1h01m */}
                       <View style={styles.rowSystemControl}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
@@ -342,7 +349,6 @@ export default function App() {
                         />
                       </View>
 
-                      {/* Control 24h Exclusivo para Final 1 */}
                       {ehFinal1 && (
                         <View style={[styles.rowSystemControl, { marginTop: 10, borderTopWidth: 1, borderTopColor: '#2A365C', paddingTop: 8 }]}>
                           <View style={{ flex: 1 }}>
@@ -365,7 +371,7 @@ export default function App() {
               </View>
             )}
 
-            {/* ABA CUSTOMIZÁVEL COMPLETA */}
+            {/* ABA CUSTOMIZÁVEL */}
             {subAba === 'custom' && (
               <View>
                 <Text style={styles.secaoHeader}>🛠️ Criar Alerta Customizado:</Text>
@@ -451,9 +457,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B132B' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: '#1C2541',
@@ -497,8 +500,7 @@ const styles = StyleSheet.create({
   },
   cardTitulo: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
   cardHorario: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  cardAvisoTexto: { color: '#38BDF8', fontSize: 11, marginTop: 4, fontWeight: '600' },
   badgeStatus: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   badgeStatusTexto: { color: '#000000', fontSize: 11, fontWeight: 'bold' },
-  botoesAcaoRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  btnAtivarTodas: { flex: 1, backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  btnDesativarTodas: { f
+  
