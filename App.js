@@ -14,55 +14,80 @@ import {
 import * as Notifications from 'expo-notifications';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async function () {
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    };
+  },
 });
 
-const EVENTOS_FIXOS_INICIAIS = [
+var EVENTOS_FIXOS_INICIAIS = [
   { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
   { id: '2', nome: 'Interserver Double', inicio: '07:00', fim: '11:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
   { id: '3', nome: 'Transporte Duplo', inicio: '09:00', fim: '10:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '4', nome: 'GuildasXGuildas', inicio: '15:30', fim: '15:35', tipo: 'ponto', ativo: true, dias: [6], aviso: 'A GvG irá iniciar em breve!' },
+  { id: '4', nome: 'GuildasXGuildas', inicio: '15:30', fim: '15:35', tipo: 'ponto', ativo: true, dias: [6], aviso: 'A GvG ira iniciar em breve!' },
   { id: '5', nome: 'Boss', inicio: '16:00', fim: '16:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
   { id: '6', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] }
 ];
 
-const DIAS_SLOTS = [
+var DIAS_SLOTS = [
   'Seg1', 'Seg2', 'Ter1', 'Ter2', 'Qua1', 'Qua2',
   'Qui1', 'Qui2', 'Sex1', 'Sex2', 'Sab1', 'Sab2', 'Dom1', 'Dom2'
 ];
 
-const COOLDOWN_1H01 = 3660;
-const COOLDOWN_24H = 86400;
+var COOLDOWN_1H01 = 3660;
+var COOLDOWN_24H = 86400;
 
 export default function App() {
-  const [abaInferior, setAbaInferior] = useState('gerador');
-  const [subAba, setSubAba] = useState('fixos');
-  const [eventos, setEventos] = useState(EVENTOS_FIXOS_INICIAIS);
-  const [agora, setAgora] = useState(new Date());
-  const [cooldowns, setCooldowns] = useState({});
-  const [eventosCustom, setEventosCustom] = useState([]);
-  const [novoNome, setNovoNome] = useState('');
-  const [novoHorario, setNovoHorario] = useState('');
+  var stateAba = useState('gerador');
+  var abaInferior = stateAba[0];
+  var setAbaInferior = stateAba[1];
 
-  useEffect(() => {
+  var stateSubAba = useState('fixos');
+  var subAba = stateSubAba[0];
+  var setSubAba = stateSubAba[1];
+
+  var stateEventos = useState(EVENTOS_FIXOS_INICIAIS);
+  var eventos = stateEventos[0];
+  var setEventos = stateEventos[1];
+
+  var stateAgora = useState(new Date());
+  var agora = stateAgora[0];
+  var setAgora = stateAgora[1];
+
+  var stateCooldowns = useState({});
+  var cooldowns = stateCooldowns[0];
+  var setCooldowns = stateCooldowns[1];
+
+  var stateEventosCustom = useState([]);
+  var eventosCustom = stateEventosCustom[0];
+  var setEventosCustom = stateEventosCustom[1];
+
+  var stateNovoNome = useState('');
+  var novoNome = stateNovoNome[0];
+  var setNovoNome = stateNovoNome[1];
+
+  var stateNovoHorario = useState('');
+  var novoHorario = stateNovoHorario[0];
+  var setNovoHorario = stateNovoHorario[1];
+
+  useEffect(function () {
     configurarNotificacoes();
-    const timer = setInterval(() => {
-      const agoraAtual = new Date();
+    var timer = setInterval(function () {
+      var agoraAtual = new Date();
       setAgora(agoraAtual);
 
-      const agoraMs = agoraAtual.getTime();
-      setCooldowns((prev) => {
-        let mudou = false;
-        const novos = { ...prev };
+      var agoraMs = agoraAtual.getTime();
+      setCooldowns(function (prev) {
+        var mudou = false;
+        var novos = Object.assign({}, prev);
 
-        Object.keys(novos).forEach((key) => {
-          const item = novos[key];
+        Object.keys(novos).forEach(function (key) {
+          var item = novos[key];
           if (item && item.ativo) {
-            const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
+            var restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
             if (restante !== item.tempoRestante) {
               mudou = true;
               novos[key] = {
@@ -79,17 +104,19 @@ export default function App() {
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return function () {
+      clearInterval(timer);
+    };
   }, []);
 
-  const configurarNotificacoes = async () => {
-    const perm = await Notifications.getPermissionsAsync();
+  async function configurarNotificacoes() {
+    var perm = await Notifications.getPermissionsAsync();
     if (perm.status !== 'granted') {
       await Notifications.requestPermissionsAsync();
     }
-  };
+  }
 
-  const agendarNotificacao = async (titulo, corpo, segundos) => {
+  async function agendarNotificacao(titulo, corpo, segundos) {
     try {
       return await Notifications.scheduleNotificationAsync({
         content: { title: titulo, body: corpo, sound: true },
@@ -99,124 +126,134 @@ export default function App() {
       console.warn('Erro ao agendar notificacao:', e);
       return null;
     }
-  };
+  }
 
-  const cancelarNotificacao = async (id) => {
+  async function cancelarNotificacao(id) {
     if (id) {
       await Notifications.cancelScheduledNotificationAsync(id);
     }
-  };
+  }
 
-  const alternarCooldown1h = async (slot) => {
-    const key = `${slot}_1h`;
-    const estadoAtual = cooldowns[key];
+  async function alternarCooldown1h(slot) {
+    var key = slot + '_1h';
+    var estadoAtual = cooldowns[key];
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns((prev) => ({
-        ...prev,
-        [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
-      }));
+      setCooldowns(function (prev) {
+        var n = Object.assign({}, prev);
+        n[key] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
+        return n;
+      });
     } else {
-      const fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
-      const notifId = await agendarNotificacao(
+      var fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
+      var notifId = await agendarNotificacao(
         'Kira Alertas - Guilda',
-        'Você já pode se juntar à próxima guilda',
+        'Voce ja pode se juntar a proxima guilda',
         COOLDOWN_1H01
       );
 
-      setCooldowns((prev) => ({
-        ...prev,
-        [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_1H01, notifId }
-      }));
+      setCooldowns(function (prev) {
+        var n = Object.assign({}, prev);
+        n[key] = { ativo: true, fimTimestamp: fimTimestamp, tempoRestante: COOLDOWN_1H01, notifId: notifId };
+        return n;
+      });
     }
-  };
+  }
 
-  const alternarCooldown24h = async (slot) => {
-    const key = `${slot}_24h`;
-    const estadoAtual = cooldowns[key];
+  async function alternarCooldown24h(slot) {
+    var key = slot + '_24h';
+    var estadoAtual = cooldowns[key];
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns((prev) => ({
-        ...prev,
-        [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
-      }));
+      setCooldowns(function (prev) {
+        var n = Object.assign({}, prev);
+        n[key] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
+        return n;
+      });
     } else {
-      const fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
-      const notifId = await agendarNotificacao(
+      var fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
+      var notifId = await agendarNotificacao(
         'Kira Alertas - Alerta 24h',
-        'Já se passaram 24h desde a última guilda',
+        'Ja se passaram 24h desde a ultima guilda',
         COOLDOWN_24H
       );
 
-      setCooldowns((prev) => ({
-        ...prev,
-        [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_24H, notifId }
-      }));
+      setCooldowns(function (prev) {
+        var n = Object.assign({}, prev);
+        n[key] = { ativo: true, fimTimestamp: fimTimestamp, tempoRestante: COOLDOWN_24H, notifId: notifId };
+        return n;
+      });
     }
-  };
+  }
 
-  const adicionarEventoCustom = () => {
+  function adicionarEventoCustom() {
     if (!novoNome.trim() || !novoHorario.trim()) {
-      Alert.alert('Atenção', 'Preencha o nome e o horário do evento.');
+      Alert.alert('Atencao', 'Preencha o nome e o horario do evento.');
       return;
     }
 
-    const novo = {
+    var novo = {
       id: Date.now().toString(),
       nome: novoNome.trim(),
       horario: novoHorario.trim()
     };
 
-    setEventosCustom((prev) => [...prev, novo]);
+    setEventosCustom(function (prev) {
+      return prev.concat([novo]);
+    });
     setNovoNome('');
     setNovoHorario('');
-  };
+  }
 
-  const removerEventoCustom = (id) => {
-    setEventosCustom((prev) => prev.filter((ev) => ev.id !== id));
-  };
+  function removerEventoCustom(id) {
+    setEventosCustom(function (prev) {
+      return prev.filter(function (ev) {
+        return ev.id !== id;
+      });
+    });
+  }
 
-  const getMinutos = (horarioStr) => {
-    const [horas, minutos] = horarioStr.split(':');
-    return parseInt(horas, 10) * 60 + parseInt(minutos, 10);
-  };
+  function getMinutos(horarioStr) {
+    var partes = horarioStr.split(':');
+    return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
+  }
 
-  const getStatusEvento = (ev) => {
-    const diaAtual = agora.getDay();
-    if (ev.dias && !ev.dias.includes(diaAtual)) {
-      return { status: 'HOJE NÃO', cor: '#475569' };
+  function getStatusEvento(ev) {
+    var diaAtual = agora.getDay();
+    if (ev.dias && ev.dias.indexOf(diaAtual) === -1) {
+      return { status: 'HOJE NAO', cor: '#475569' };
     }
 
-    const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
-    const segundosAtuais = agora.getSeconds();
-    const iniMin = getMinutos(ev.inicio);
-    const fimMin = ev.tipo === 'duracao' ? getMinutos(ev.fim) : iniMin + 5;
+    var minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
+    var segundosAtuais = agora.getSeconds();
+    var iniMin = getMinutos(ev.inicio);
+    var fimMin = ev.tipo === 'duracao' ? getMinutos(ev.fim) : iniMin + 5;
 
     if (minutosAtuais >= iniMin && minutosAtuais < fimMin) {
       return { status: 'EM ANDAMENTO', cor: '#10B981' };
     }
 
     if (minutosAtuais >= fimMin) {
-      return { status: 'CONCLUÍDO', cor: '#64748B' };
+      return { status: 'CONCLUIDO', cor: '#64748B' };
     }
 
-    const diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
-    const h = Math.floor(diffMinutosTotal / 3600);
-    const m = Math.floor((diffMinutosTotal % 3600) / 60);
-    const s = diffMinutosTotal % 60;
+    var diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
+    var h = Math.floor(diffMinutosTotal / 3600);
+    var m = Math.floor((diffMinutosTotal % 3600) / 60);
+    var s = diffMinutosTotal % 60;
 
-    const textoTempo = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
-    return { status: `Próximo (em ${textoTempo})`, cor: '#EAB308' };
-  };
+    var textoTempo = h > 0 ? h + 'h ' + m + 'm ' + s + 's' : m + 'm ' + s + 's';
+    return { status: 'Proximo (em ' + textoTempo + ')', cor: '#EAB308' };
+  }
 
-  const formatarTempo = (segundos) => {
-    const h = Math.floor(segundos / 3600);
-    const m = Math.floor((segundos % 3600) / 60);
-    const s = segundos % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
+  function formatarTempo(segundos) {
+    var h = Math.floor(segundos / 3600);
+    var m = Math.floor((segundos % 3600) / 60);
+    var s = segundos % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -232,45 +269,47 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {abaInferior === 'gerador' ? (
           <View style={styles.painelContainer}>
-            <Text style={styles.painelTitulo}>🔔 Painel de Notificações</Text>
+            <Text style={styles.painelTitulo}>🔔 Painel de Notificacoes</Text>
 
             <View style={styles.subAbasContainer}>
               <TouchableOpacity
-                style={[styles.subAbaBtn, subAba === 'fixos' && styles.subAbaBtnAtivo]}
-                onPress={() => setSubAba('fixos')}
+                style={[styles.subAbaBtn, subAba === 'fixos' ? styles.subAbaBtnAtivo : null]}
+                onPress={function () { setSubAba('fixos'); }}
               >
-                <Text style={[styles.subAbaTexto, subAba === 'fixos' && styles.subAbaTextoAtivo]}>Eventos Fixos</Text>
+                <Text style={[styles.subAbaTexto, subAba === 'fixos' ? styles.subAbaTextoAtivo : null]}>Eventos Fixos</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.subAbaBtn, subAba === 'sistema' && styles.subAbaBtnAtivo]}
-                onPress={() => setSubAba('sistema')}
+                style={[styles.subAbaBtn, subAba === 'sistema' ? styles.subAbaBtnAtivo : null]}
+                onPress={function () { setSubAba('sistema'); }}
               >
-                <Text style={[styles.subAbaTexto, subAba === 'sistema' && styles.subAbaTextoAtivo]}>Sistema</Text>
+                <Text style={[styles.subAbaTexto, subAba === 'sistema' ? styles.subAbaTextoAtivo : null]}>Sistema</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.subAbaBtn, subAba === 'custom' && styles.subAbaBtnAtivo]}
-                onPress={() => setSubAba('custom')}
+                style={[styles.subAbaBtn, subAba === 'custom' ? styles.subAbaBtnAtivo : null]}
+                onPress={function () { setSubAba('custom'); }}
               >
-                <Text style={[styles.subAbaTexto, subAba === 'custom' && styles.subAbaTextoAtivo]}>Customizável</Text>
+                <Text style={[styles.subAbaTexto, subAba === 'custom' ? styles.subAbaTextoAtivo : null]}>Customizavel</Text>
               </TouchableOpacity>
             </View>
 
-            {subAba === 'fixos' && (
+            {subAba === 'fixos' ? (
               <View>
-                <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
+                <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diarios:</Text>
                 <View style={styles.timelineBox}>
-                  {eventos.map((ev) => {
-                    const infoStatus = getStatusEvento(ev);
+                  {eventos.map(function (ev) {
+                    var infoStatus = getStatusEvento(ev);
                     return (
                       <View key={ev.id} style={styles.cardTimeline}>
                         <View style={styles.cardTimelineInfo}>
                           <Text style={styles.cardTitulo}>{ev.nome}</Text>
                           <Text style={styles.cardHorario}>
-                            ⏰ {ev.tipo === 'duracao' ? `${ev.inicio} - ${ev.fim}` : ev.inicio}
+                            ⏰ {ev.tipo === 'duracao' ? ev.inicio + ' - ' + ev.fim : ev.inicio}
                           </Text>
-                          {ev.aviso ? <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text> : null}
+                          {ev.aviso ? (
+                            <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
+                          ) : null}
                         </View>
                         <View style={[styles.badgeStatus, { backgroundColor: infoStatus.cor }]}>
                           <Text style={styles.badgeStatusTexto}>{infoStatus.status}</Text>
@@ -280,57 +319,69 @@ export default function App() {
                   })}
                 </View>
 
-                <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m antes):</Text>
+                <Text style={styles.secaoHeader}>⚡ Notificacoes Automaticas (5m antes):</Text>
                 <View style={styles.botoesAcaoRow}>
                   <TouchableOpacity
                     style={styles.btnAtivarTodas}
-                    onPress={() => setEventos((prev) => prev.map((e) => ({ ...e, ativo: true })))}
+                    onPress={function () {
+                      setEventos(function (prev) {
+                        return prev.map(function (e) { return Object.assign({}, e, { ativo: true }); });
+                      });
+                    }}
                   >
                     <Text style={styles.btnAcaoTexto}>🔔 Ativar Todas</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.btnDesativarTodas}
-                    onPress={() => setEventos((prev) => prev.map((e) => ({ ...e, ativo: false })))}
+                    onPress={function () {
+                      setEventos(function (prev) {
+                        return prev.map(function (e) { return Object.assign({}, e, { ativo: false }); });
+                      });
+                    }}
                   >
                     <Text style={styles.btnAcaoTexto}>🔕 Desativar Todas</Text>
                   </TouchableOpacity>
                 </View>
 
-                {eventos.map((ev) => (
-                  <View key={ev.id} style={styles.cardToggle}>
-                    <View style={styles.cardTimelineInfo}>
-                      <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                      <Text style={styles.cardSub}>
-                        Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
-                      </Text>
-                      <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
+                {eventos.map(function (ev) {
+                  return (
+                    <View key={ev.id} style={styles.cardToggle}>
+                      <View style={styles.cardTimelineInfo}>
+                        <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                        <Text style={styles.cardSub}>
+                          Horario: {ev.tipo === 'duracao' ? ev.inicio + ' as ' + ev.fim : ev.inicio}
+                        </Text>
+                        <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
+                      </View>
+                      <Switch
+                        value={ev.ativo}
+                        onValueChange={function () {
+                          setEventos(function (prev) {
+                            return prev.map(function (e) {
+                              return e.id === ev.id ? Object.assign({}, e, { ativo: !e.ativo }) : e;
+                            });
+                          });
+                        }}
+                        trackColor={{ false: '#334155', true: '#059669' }}
+                        thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
+                      />
                     </View>
-                    <Switch
-                      value={ev.ativo}
-                      onValueChange={() =>
-                        setEventos((prev) =>
-                          prev.map((e) => (e.id === ev.id ? { ...e, ativo: !e.ativo } : e))
-                        )
-                      }
-                      trackColor={{ false: '#334155', true: '#059669' }}
-                      thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
-                    />
-                  </View>
-                ))}
+                  );
+                })}
               </View>
-            )}
+            ) : null}
 
-            {subAba === 'sistema' && (
+            {subAba === 'sistema' ? (
               <View>
                 <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
                 <Text style={styles.subTituloInstrucao}>
                   Slots final 1 possuem o controle adicional de 24h.
                 </Text>
 
-                {DIAS_SLOTS.map((slot) => {
-                  const ehFinal1 = slot.endsWith('1');
-                  const info1h = cooldowns[`${slot}_1h`] || { ativo: false, tempoRestante: 0 };
-                  const info24h = cooldowns[`${slot}_24h`] || { ativo: false, tempoRestante: 0 };
+                {DIAS_SLOTS.map(function (slot) {
+                  var ehFinal1 = slot.indexOf('1', slot.length - 1) !== -1;
+                  var info1h = cooldowns[slot + '_1h'] || { ativo: false, tempoRestante: 0 };
+                  var info24h = cooldowns[slot + '_24h'] || { ativo: false, tempoRestante: 0 };
 
                   return (
                     <View key={slot} style={styles.cardSystemSlot}>
@@ -340,40 +391,40 @@ export default function App() {
                         <View style={styles.cardTimelineInfo}>
                           <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
                           <Text style={info1h.ativo ? styles.cardTimerAtivo : styles.cardSub}>
-                            {info1h.ativo ? `⏳ ${formatarTempo(info1h.tempoRestante)}` : 'Inativo'}
+                            {info1h.ativo ? '⏳ ' + formatarTempo(info1h.tempoRestante) : 'Inativo'}
                           </Text>
                         </View>
                         <Switch
                           value={Boolean(info1h.ativo)}
-                          onValueChange={() => alternarCooldown1h(slot)}
+                          onValueChange={function () { alternarCooldown1h(slot); }}
                           trackColor={{ false: '#334155', true: '#2563EB' }}
                           thumbColor={info1h.ativo ? '#3B82F6' : '#94A3B8'}
                         />
                       </View>
 
-                      {ehFinal1 && (
+                      {ehFinal1 ? (
                         <View style={styles.rowSystemControlDivider}>
                           <View style={styles.cardTimelineInfo}>
                             <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
                             <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
-                              {info24h.ativo ? `⌛ ${formatarTempo(info24h.tempoRestante)}` : 'Inativo'}
+                              {info24h.ativo ? '⌛ ' + formatarTempo(info24h.tempoRestante) : 'Inativo'}
                             </Text>
                           </View>
                           <Switch
                             value={Boolean(info24h.ativo)}
-                            onValueChange={() => alternarCooldown24h(slot)}
+                            onValueChange={function () { alternarCooldown24h(slot); }}
                             trackColor={{ false: '#334155', true: '#D97706' }}
                             thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
                           />
                         </View>
-                      )}
+                      ) : null}
                     </View>
                   );
                 })}
               </View>
-            )}
+            ) : null}
 
-            {subAba === 'custom' && (
+            {subAba === 'custom' ? (
               <View>
                 <Text style={styles.secaoHeader}>🛠️ Criar Alerta Customizado:</Text>
 
@@ -387,7 +438,7 @@ export default function App() {
                   />
                   <TextInput
                     style={styles.inputCustom}
-                    placeholder="Horário (ex: 20:30)"
+                    placeholder="Horario (ex: 20:30)"
                     placeholderTextColor="#64748B"
                     value={novoHorario}
                     onChangeText={setNovoHorario}
@@ -401,20 +452,23 @@ export default function App() {
                 {eventosCustom.length === 0 ? (
                   <Text style={styles.abaVaziaTexto}>Nenhum evento customizado adicionado.</Text>
                 ) : (
-                  eventosCustom.map((ev) => (
-                    <View key={ev.id} style={styles.cardToggle}>
-                      <View style={styles.cardTimelineInfo}>
-                        <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                        <Text style={styles.cardSub}>Horário: {ev.horario}</Text>
+                  eventosCustom.map(function (ev) {
+                    return (
+                      <View key={ev.id} style={styles.cardToggle}>
+                        <View style={styles.cardTimelineInfo}>
+                          <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                          <Text style={styles.cardSub}>Horario: {ev.horario}</Text>
+                        </View>
+                        <TouchableOpacity onPress={function () { removerEventoCustom(ev.id); }} style={styles.btnDeletar}>
+                          <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
+                        </TouchableOpacity>
                       </View>
-                      <TouchableOpacity onPress={() => removerEventoCustom(ev.id)} style={styles.btnDeletar}>
-                        <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
+                    );
+                  })
                 )}
               </View>
-            )}
+            ) : null}
+
           </View>
         ) : (
           <View style={styles.abaVaziaContainer}>
@@ -424,36 +478,36 @@ export default function App() {
       </ScrollView>
 
       <View style={styles.navBottom}>
-        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('gerador')}>
+        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('gerador'); }}>
           <Text style={styles.navIcon}>⚡</Text>
-          <Text style={[styles.navText, abaInferior === 'gerador' && styles.navTextAtivo]}>Gerador</Text>
+          <Text style={[styles.navText, abaInferior === 'gerador' ? styles.navTextAtivo : null]}>Gerador</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('pessoas')}>
+        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('pessoas'); }}>
           <Text style={styles.navIcon}>👥</Text>
-          <Text style={[styles.navText, abaInferior === 'pessoas' && styles.navTextAtivo]}>Pessoas</Text>
+          <Text style={[styles.navText, abaInferior === 'pessoas' ? styles.navTextAtivo : null]}>Pessoas</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('historico')}>
+        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('historico'); }}>
           <Text style={styles.navIcon}>📜</Text>
-          <Text style={[styles.navText, abaInferior === 'historico' && styles.navTextAtivo]}>Histórico</Text>
+          <Text style={[styles.navText, abaInferior === 'historico' ? styles.navTextAtivo : null]}>Historico</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('guilda')}>
+        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('guilda'); }}>
           <Text style={styles.navIcon}>🏰</Text>
-          <Text style={[styles.navText, abaInferior === 'guilda' && styles.navTextAtivo]}>Guilda</Text>
+          <Text style={[styles.navText, abaInferior === 'guilda' ? styles.navTextAtivo : null]}>Guilda</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('dev')}>
+        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('dev'); }}>
           <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={[styles.navText, abaInferior === 'dev' && styles.navTextAtivo]}>Dev</Text>
+          <Text style={[styles.navText, abaInferior === 'dev' ? styles.navTextAtivo : null]}>Dev</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+var styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0B132B'
@@ -463,98 +517,4 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#1C2541'
   },
-  headerTitleBox: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  headerEmoji: {
-    fontSize: 18,
-    marginRight: 8
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold'
-  },
-  scrollContent: {
-    padding: 14,
-    paddingBottom: 80
-  },
-  painelContainer: {
-    backgroundColor: '#111C38',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#1E293B'
-  },
-  painelTitulo: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12
-  },
-  subAbasContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#0B132B',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 16
-  },
-  subAbaBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 6
-  },
-  subAbaBtnAtivo: {
-    backgroundColor: '#2563EB'
-  },
-  subAbaTexto: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  subAbaTextoAtivo: {
-    color: '#FFFFFF'
-  },
-  secaoHeader: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 10
-  },
-  subTituloInstrucao: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginBottom: 12
-  },
-  timelineBox: {
-    marginBottom: 16
-  },
-  cardTimeline: {
-    backgroundColor: '#1C2541',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2A365C'
-  },
-  cardTimelineInfo: {
-    flex: 1
-  },
-  cardTitulo: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold'
-  },
-  cardHorario: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 4
-  },
-  cardAvisoTexto: {
-    color: '#
+  head
