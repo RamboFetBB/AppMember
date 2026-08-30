@@ -30,20 +30,23 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup EAS CLI
-        run: npm install -g eas-cli
-
       - name: Install dependencies
         run: |
           npm cache clean --force
           npm install --force
 
-      - name: Build Android APK (Local EAS)
-        run: npx eas-cli build --platform android --profile preview --local
+      - name: Prebuild Expo Native Project
+        run: npx expo prebuild --platform android
+
+      - name: Build Android Release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Alertas-PokeMembros-APK
-          path: '*.apk'
+          path: android/app/build/outputs/apk/release/app-release.apk
           
