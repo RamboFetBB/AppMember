@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
-// Configuração de comportamento das notificações
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -20,186 +19,219 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const EVENTOS_FIXOS = [
-  { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:00', tipo: 'ponto' },
-  { id: '2', nome: 'Interserver Duplo', inicio: '07:00', fim: '11:00', tipo: 'duracao' },
-  { id: '3', nome: 'Transporte', inicio: '09:00', fim: '10:00', tipo: 'duracao' },
-  { id: '4', nome: 'Boss', inicio: '16:00', fim: '16:00', tipo: 'ponto' },
-  { id: '5', nome: 'Riot', inicio: '17:00', fim: '17:00', tipo: 'ponto' },
+const EVENTOS_FIXOS_INICIAIS = [
+  { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:05', tipo: 'ponto', ativo: true },
+  { id: '2', nome: 'Interserver Double', inicio: '07:00', fim: '11:00', tipo: 'duracao', ativo: true },
+  { id: '3', nome: 'Transporte Duplo', inicio: '09:00', fim: '10:00', tipo: 'duracao', ativo: true },
+  { id: '4', nome: 'Boss', inicio: '16:00', fim: '16:05', tipo: 'ponto', ativo: true },
+  { id: '5', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true },
 ];
 
 export default function App() {
-  const [alertasAtivos, setAlertasAtivos] = useState(true);
-  const [progressoNotificacao, setProgressoNotificacao] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState('fixos');
+  const [abaInferior, setAbaInferior] = useState('gerador');
+  const [subAba, setSubAba] = useState('fixos');
+  const [eventos, setEventos] = useState(EVENTOS_FIXOS_INICIAIS);
+  const [agora, setAgora] = useState(new Date());
+
+  // Relógio em tempo real para atualizar status e contagem regressiva a cada segundo
+  useEffect(() => {
+    const timer = setInterval(() => setAgora(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     solicitarPermissoes();
   }, []);
 
-  useEffect(() => {
-    let interval = null;
-    if (progressoNotificacao) {
-      atualizarNotificacaoProgresso();
-      interval = setInterval(atualizarNotificacaoProgresso, 60000); // Atualiza a cada minuto
-    } else {
-      cancelarNotificacaoProgresso();
-    }
-    return () => clearInterval(interval);
-  }, [progressoNotificacao]);
-
   async function solicitarPermissoes() {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') {
-      alert('Permissão para notificações é necessária!');
-    }
+    await Notifications.requestPermissionsAsync();
   }
 
-  // Converte "HH:MM" para minutos do dia
+  // Auxiliar: Minutos desde 00:00
   function getMinutos(horarioStr) {
     const [h, m] = horarioStr.split(':').map(Number);
     return h * 60 + m;
   }
 
-  // Notificação com barra de progresso no Android
-  async function atualizarNotificacaoProgresso() {
-    const agora = new Date();
+  // Lógica de cálculo do estado do evento
+  function getStatusEvento(inicioStr, fimStr, tipo) {
     const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
-    const totalMinutosDia = 24 * 60;
-    const porcentagem = Math.round((minutosAtuais / totalMinutosDia) * 100);
+    const segundosAtuais = agora.getSeconds();
+    const iniMin = getMinutos(inicioStr);
+    const fimMin = tipo === 'duracao' ? getMinutos(fimStr) : iniMin + 5; // Ponto dura 5min de exibição
 
-    // Encontra evento em andamento ou o próximo
-    const eventoAtual = EVENTOS_FIXOS.find(e => {
-      const ini = getMinutos(e.inicio);
-      const fim = getMinutos(e.fim);
-      return e.tipo === 'duracao' && minutosAtuais >= ini && minutosAtuais <= fim;
-    });
+    if (minutosAtuais >= iniMin && minutosAtuais < fimMin) {
+      return { status: 'EM ANDAMENTO', cor: '#10B981' };
+    }
 
-    const proximoEvento = EVENTOS_FIXOS.find(e => getMinutos(e.inicio) > minutosAtuais) || EVENTOS_FIXOS[0];
+    if (minutosAtuais >= fimMin) {
+      return { status: 'CONCLUÍDO', cor: '#64748B' };
+    }
 
-    let textoNotificacao = eventoAtual 
-      ? `Em andamento: ${eventoAtual.nome}`
-      : `Próximo: ${proximoEvento.nome} às ${proximoEvento.inicio}`;
+    // Calcular tempo restante exato para o início
+    const diffMinutos = iniMin - minutosAtuais - 1;
+    const diffSegundos = 60 - segundosAtuais;
+    const horasRestantes = Math.floor(diffMinutos / 60);
+    const minsRestantes = diffMinutos % 60;
 
-    await Notifications.scheduleNotificationAsync({
-      identifier: 'progresso_notificacao',
-      content: {
-        title: '📊 Progresso dos Eventos do Dia',
-        body: `[${porcentagem}% do dia] ${textoNotificacao}`,
-        sticky: true, // Mantém a notificação fixa na barra
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-        color: '#EAB308', // Cor amarela da notificação
-      },
-      trigger: null, // Exibe imediatamente
-    });
+    let textoTempo = '';
+    if (horasRestantes > 0) {
+      textoTempo = `(em ${horasRestantes}h ${minsRestantes}m)`;
+    } else {
+      textoTempo = `(em ${minsRestantes}m ${diffSegundos}s)`;
+    }
+
+    return { status: `Próximo ${textoTempo}`, cor: '#EAB308' };
   }
 
-  async function cancelarNotificacaoProgresso() {
-    await Notifications.dismissNotificationAsync('progresso_notificacao');
+  // Toggles globais
+  function alternarTodos(ativo) {
+    setEventos(prev => prev.map(ev => ({ ...ev, ativo })));
+  }
+
+  // Toggle individual
+  function alternarEvento(id) {
+    setEventos(prev => prev.map(ev => ev.id === id ? { ...ev, ativo: !ev.ativo } : ev));
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0B1120" />
-      
-      {/* Header */}
+      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+
+      {/* Header Superior */}
       <View style={styles.header}>
-        <Text style={styles.tituloHeader}>Alertas Poke_membros</Text>
+        <View style={styles.headerTitleBox}>
+          <Text style={styles.headerEmoji}>🛡️</Text>
+          <Text style={styles.headerTitle}>GvG Dev Manager</Text>
+        </View>
+        <TouchableOpacity style={styles.btnEnviarHoje}>
+          <Text style={styles.btnEnviarHojeTexto}>⌛ Enviar Hoje</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        
-        {/* Toggle Alertas do Dia */}
-        <View style={styles.cardToggle}>
-          <View>
-            <Text style={styles.tituloToggle}>Alertas do Dia</Text>
-            <Text style={styles.subtituloToggle}>Notificar 5 min antes</Text>
-          </View>
-          <Switch
-            value={alertasAtivos}
-            onValueChange={setAlertasAtivos}
-            trackColor={{ false: '#334155', true: '#0284C7' }}
-            thumbColor={alertasAtivos ? '#38BDF8' : '#94A3B8'}
-          />
-        </View>
+        {abaInferior === 'gerador' ? (
+          <View style={styles.painelContainer}>
+            
+            {/* Título do Painel */}
+            <Text style={styles.painelTitulo}>🔔 Painel de Notificações</Text>
 
-        {/* Toggle Ver progresso na notificação */}
-        <View style={[styles.cardToggle, { borderColor: '#EAB308', borderWidth: 1 }]}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.tituloToggle}>Ver progresso na notificação</Text>
-            <Text style={styles.subtituloToggle}>Exibe barra amarela de status do dia</Text>
-          </View>
-          <Switch
-            value={progressoNotificacao}
-            onValueChange={setProgressoNotificacao}
-            trackColor={{ false: '#334155', true: '#CA8A04' }}
-            thumbColor={progressoNotificacao ? '#FACC15' : '#94A3B8'}
-          />
-        </View>
+            {/* Sub-Abas superiores */}
+            <View style={styles.subAbasContainer}>
+              <TouchableOpacity
+                style={[styles.subAbaBtn, subAba === 'fixos' && styles.subAbaBtnAtivo]}
+                onPress={() => setSubAba('fixos')}
+              >
+                <Text style={[styles.subAbaTexto, subAba === 'fixos' && styles.subAbaTextoAtivo]}>Eventos Fixos</Text>
+              </TouchableOpacity>
 
-        {/* Linha do Tempo / Timeline */}
-        <Text style={styles.secaoTitulo}>Timeline de Eventos</Text>
-        <View style={styles.timelineContainer}>
-          {EVENTOS_FIXOS.map((evento, index) => (
-            <View key={evento.id} style={styles.timelineItem}>
-              
-              {/* Coluna Esquerda: Horário */}
-              <View style={styles.timelineHoraBox}>
-                <Text style={styles.timelineHoraTexto}>{evento.inicio}</Text>
-                {evento.tipo === 'duracao' && (
-                  <Text style={styles.timelineHoraFim}>até {evento.fim}</Text>
-                )}
-              </View>
+              <TouchableOpacity
+                style={[styles.subAbaBtn, subAba === 'sistema' && styles.subAbaBtnAtivo]}
+                onPress={() => setSubAba('sistema')}
+              >
+                <Text style={[styles.subAbaTexto, subAba === 'sistema' && styles.subAbaTextoAtivo]}>Sistema</Text>
+              </TouchableOpacity>
 
-              {/* Coluna Meio: Linha e Ponto Visual */}
-              <View style={styles.timelineLinhaBox}>
-                <View style={styles.timelinePonto} />
-                {index !== EVENTOS_FIXOS.length - 1 && <View style={styles.timelineLinha} />}
-              </View>
-
-              {/* Coluna Direita: Card do Evento */}
-              <View style={styles.timelineCard}>
-                <Text style={styles.eventoNome}>{evento.nome}</Text>
-                <Text style={styles.eventoSub}>
-                  {evento.tipo === 'duracao' 
-                    ? `Evento ativo (${evento.inicio} - ${evento.fim})`
-                    : `Horário fixo (${evento.inicio})`}
-                </Text>
-              </View>
-
+              <TouchableOpacity
+                style={[styles.subAbaBtn, subAba === 'custom' && styles.subAbaBtnAtivo]}
+                onPress={() => setSubAba('custom')}
+              >
+                <Text style={[styles.subAbaTexto, subAba === 'custom' && styles.subAbaTextoAtivo]}>Customizável</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
 
+            {subAba === 'fixos' ? (
+              <>
+                {/* Timeline de Eventos */}
+                <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
+                <View style={styles.timelineBox}>
+                  {eventos.map(ev => {
+                    const infoStatus = getStatusEvento(ev.inicio, ev.fim, ev.tipo);
+                    return (
+                      <View key={ev.id} style={styles.cardTimeline}>
+                        <View>
+                          <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                          <Text style={styles.cardHorario}>
+                            ⏰ {ev.tipo === 'duracao' ? `${ev.inicio} - ${ev.fim}` : ev.inicio}
+                          </Text>
+                        </View>
+                        <View style={[styles.badgeStatus, { backgroundColor: infoStatus.cor }]}>
+                          <Text style={styles.badgeStatusTexto}>{infoStatus.status}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* Ações de Notificação */}
+                <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m antes):</Text>
+                <View style={styles.botoesAcaoRow}>
+                  <TouchableOpacity style={styles.btnAtivarTodas} onPress={() => alternarTodos(true)}>
+                    <Text style={styles.btnAcaoTexto}>🔔 Ativar Todas</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.btnDesativarTodas} onPress={() => alternarTodos(false)}>
+                    <Text style={styles.btnAcaoTexto}>🔕 Desativar Todas</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Lista de Toggles Individuais */}
+                {eventos.map(ev => (
+                  <View key={ev.id} style={styles.cardToggle}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                      <Text style={styles.cardSub}>
+                        Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
+                      </Text>
+                      <Text style={styles.cardNotiInfo}>⚡ Notifica diariamente 5m antes</Text>
+                    </View>
+                    <Switch
+                      value={ev.ativo}
+                      onValueChange={() => alternarEvento(ev.id)}
+                      trackColor={{ false: '#334155', true: '#059669' }}
+                      thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
+                    />
+                  </View>
+                ))}
+              </>
+            ) : (
+              <View style={styles.abaVaziaContainer}>
+                <Text style={styles.abaVaziaTexto}>Configurações de {subAba}</Text>
+              </View>
+            )}
+
+          </View>
+        ) : (
+          <View style={styles.abaVaziaContainer}>
+            <Text style={styles.abaVaziaTexto}>Tela: {abaInferior.toUpperCase()}</Text>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Navegação Inferior por Abas */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={[styles.navItem, abaAtiva === 'fixos' && styles.navItemAtivo]}
-          onPress={() => setAbaAtiva('fixos')}
-        >
-          <Text style={[styles.navTexto, abaAtiva === 'fixos' && styles.navTextoAtivo]}>
-            Eventos Fixos
-          </Text>
+      {/* Navegação Inferior de 5 Ícones */}
+      <View style={styles.navBottom}>
+        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('gerador')}>
+          <Text style={styles.navIcon}>⚡</Text>
+          <Text style={[styles.navText, abaInferior === 'gerador' && styles.navTextAtivo]}>Gerador</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.navItem, abaAtiva === 'custom' && styles.navItemAtivo]}
-          onPress={() => setAbaAtiva('custom')}
-        >
-          <Text style={[styles.navTexto, abaAtiva === 'custom' && styles.navTextoAtivo]}>
-            Alertas Custom
-          </Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('pessoas')}>
+          <Text style={styles.navIcon}>👥</Text>
+          <Text style={[styles.navText, abaInferior === 'pessoas' && styles.navTextAtivo]}>Pessoas</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.navItem, abaAtiva === 'guilda' && styles.navItemAtivo]}
-          onPress={() => setAbaAtiva('guilda')}
-        >
-          <Text style={[styles.navTexto, abaAtiva === 'guilda' && styles.navTextoAtivo]}>
-            Guilda 1 e 2
-          </Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('historico')}>
+          <Text style={styles.navIcon}>📜</Text>
+          <Text style={[styles.navText, abaInferior === 'historico' && styles.navTextAtivo]}>Histórico</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('guilda')}>
+          <Text style={styles.navIcon}>🏰</Text>
+          <Text style={[styles.navText, abaInferior === 'guilda' && styles.navTextAtivo]}>Guilda</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('dev')}>
+          <Text style={styles.navIcon}>⚙️</Text>
+          <Text style={[styles.navText, abaInferior === 'dev' && styles.navTextAtivo]}>Dev</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -209,138 +241,201 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B1120',
+    backgroundColor: '#0B132B',
   },
   header: {
-    paddingVertical: 18,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-  },
-  tituloHeader: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 80,
-  },
-  cardToggle: {
     flexDirection: 'row',
-    justifyContent: 'space-[#1E293B]',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#1C2541',
+  },
+  headerTitleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerEmoji: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  btnEnviarHoje: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  btnEnviarHojeTexto: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  scrollContent: {
+    padding: 14,
+    paddingBottom: 70,
+  },
+  painelContainer: {
+    backgroundColor: '#111C38',
     borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+  },
+  painelTitulo: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
     marginBottom: 12,
   },
-  tituloToggle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  subAbasContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0B132B',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 16,
+  },
+  subAbaBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  subAbaBtnAtivo: {
+    backgroundColor: '#2563EB',
+  },
+  subAbaTexto: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  subAbaTextoAtivo: {
     color: '#FFFFFF',
   },
-  subtituloToggle: {
-    fontSize: 12,
-    color: '#94A3B8',
-    marginTop: 2,
-  },
-  secaoTitulo: {
-    fontSize: 16,
+  secaoHeader: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#94A3B8',
-    marginTop: 12,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  timelineBox: {
     marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
-  timelineContainer: {
-    paddingLeft: 4,
-  },
-  timelineItem: {
+  cardTimeline: {
+    backgroundColor: '#1C2541',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
     flexDirection: 'row',
-    marginBottom: 16,
-    minHeight: 60,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2A365C',
   },
-  timelineHoraBox: {
-    width: 70,
-    alignItems: 'flex-end',
-    paddingRight: 12,
-    paddingTop: 4,
-  },
-  timelineHoraTexto: {
-    color: '#38BDF8',
+  cardTitulo: {
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
   },
-  timelineHoraFim: {
-    color: '#64748B',
+  cardHorario: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  badgeStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  badgeStatusTexto: {
+    color: '#000000',
     fontSize: 11,
+    fontWeight: 'bold',
   },
-  timelineLinhaBox: {
+  botoesAcaoRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  btnAtivarTodas: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 8,
     alignItems: 'center',
-    marginRight: 12,
   },
-  timelinePonto: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#38BDF8',
-    borderWidth: 3,
-    borderColor: '#0B1120',
-    zIndex: 1,
-  },
-  timelineLinha: {
-    width: 2,
+  btnDesativarTodas: {
     flex: 1,
     backgroundColor: '#334155',
-    marginTop: -2,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  timelineCard: {
-    flex: 1,
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    padding: 12,
-    justifyContent: 'center',
-  },
-  eventoNome: {
+  btnAcaoTexto: {
     color: '#FFFFFF',
-    fontSize: 15,
     fontWeight: 'bold',
+    fontSize: 13,
   },
-  eventoSub: {
+  cardToggle: {
+    backgroundColor: '#1C2541',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2A365C',
+  },
+  cardSub: {
     color: '#94A3B8',
     fontSize: 12,
     marginTop: 2,
   },
-  bottomNav: {
+  cardNotiInfo: {
+    color: '#10B981',
+    fontSize: 11,
+    marginTop: 4,
+  },
+  abaVaziaContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  abaVaziaTexto: {
+    color: '#94A3B8',
+    fontSize: 14,
+  },
+  navBottom: {
     flexDirection: 'row',
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0B132B',
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
+    paddingVertical: 6,
   },
   navItem: {
     flex: 1,
-    paddingVertical: 14,
     alignItems: 'center',
   },
-  navItemAtivo: {
-    borderTopWidth: 2,
-    borderTopColor: '#38BDF8',
+  navIcon: {
+    fontSize: 16,
   },
-  navTexto: {
+  navText: {
     color: '#64748B',
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 10,
+    marginTop: 2,
   },
-  navTextoAtivo: {
-    color: '#38BDF8',
+  navTextAtivo: {
+    color: '#3B82F6',
     fontWeight: 'bold',
   },
 });
-    
+                  
