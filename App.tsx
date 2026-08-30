@@ -10,21 +10,45 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
-  Platform
+  Platform,
+  ViewStyle,
+  TextStyle
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
+interface EventoFixo {
+  id: string;
+  nome: string;
+  inicio: string;
+  fim: string;
+  tipo: 'ponto' | 'duracao';
+  ativo: boolean;
+  dias: number[];
+  aviso?: string;
+}
+
+interface EventoCustom {
+  id: string;
+  nome: string;
+  horario: string;
+}
+
+interface CooldownState {
+  ativo: boolean;
+  fimTimestamp: number;
+  tempoRestante: number;
+  notifId: string | null;
+}
+
 Notifications.setNotificationHandler({
-  handleNotification: async function () {
-    return {
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    };
-  },
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
 });
 
-var EVENTOS_FIXOS_INICIAIS = [
+const EVENTOS_FIXOS_INICIAIS: EventoFixo[] = [
   { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
   { id: '2', nome: 'Interserver Double', inicio: '07:00', fim: '11:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
   { id: '3', nome: 'Transporte Duplo', inicio: '09:00', fim: '10:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
@@ -33,62 +57,39 @@ var EVENTOS_FIXOS_INICIAIS = [
   { id: '6', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] }
 ];
 
-var DIAS_SLOTS = [
+const DIAS_SLOTS: string[] = [
   'Seg1', 'Seg2', 'Ter1', 'Ter2', 'Qua1', 'Qua2',
   'Qui1', 'Qui2', 'Sex1', 'Sex2', 'Sab1', 'Sab2', 'Dom1', 'Dom2'
 ];
 
-var COOLDOWN_1H01 = 3660;
-var COOLDOWN_24H = 86400;
+const COOLDOWN_1H01 = 3660;
+const COOLDOWN_24H = 86400;
 
-export default function App() {
-  var stateAba = useState('gerador');
-  var abaInferior = stateAba[0];
-  var setAbaInferior = stateAba[1];
+export default function App(): React.JSX.Element {
+  const [abaInferior, setAbaInferior] = useState<string>('gerador');
+  const [subAba, setSubAba] = useState<string>('fixos');
+  const [eventos, setEventos] = useState<EventoFixo[]>(EVENTOS_FIXOS_INICIAIS);
+  const [agora, setAgora] = useState<Date>(new Date());
+  const [cooldowns, setCooldowns] = useState<Record<string, CooldownState>>({});
+  const [eventosCustom, setEventosCustom] = useState<EventoCustom[]>([]);
+  const [novoNome, setNovoNome] = useState<string>('');
+  const [novoHorario, setNovoHorario] = useState<string>('');
 
-  var stateSubAba = useState('fixos');
-  var subAba = stateSubAba[0];
-  var setSubAba = stateSubAba[1];
-
-  var stateEventos = useState(EVENTOS_FIXOS_INICIAIS);
-  var eventos = stateEventos[0];
-  var setEventos = stateEventos[1];
-
-  var stateAgora = useState(new Date());
-  var agora = stateAgora[0];
-  var setAgora = stateAgora[1];
-
-  var stateCooldowns = useState<Record<string, any>>({});
-  var cooldowns = stateCooldowns[0];
-  var setCooldowns = stateCooldowns[1];
-
-  var stateEventosCustom = useState<any[]>([]);
-  var eventosCustom = stateEventosCustom[0];
-  var setEventosCustom = stateEventosCustom[1];
-
-  var stateNovoNome = useState('');
-  var novoNome = stateNovoNome[0];
-  var setNovoNome = stateNovoNome[1];
-
-  var stateNovoHorario = useState('');
-  var novoHorario = stateNovoHorario[0];
-  var setNovoHorario = stateNovoHorario[1];
-
-  useEffect(function () {
+  useEffect(() => {
     configurarNotificacoes();
-    var timer = setInterval(function () {
-      var agoraAtual = new Date();
+    const timer = setInterval(() => {
+      const agoraAtual = new Date();
       setAgora(agoraAtual);
 
-      var agoraMs = agoraAtual.getTime();
-      setCooldowns(function (prev: any) {
-        var mudou = false;
-        var novos = Object.assign({}, prev);
+      const agoraMs = agoraAtual.getTime();
+      setCooldowns((prev) => {
+        let mudou = false;
+        const novos = { ...prev };
 
-        Object.keys(novos).forEach(function (key) {
-          var item = novos[key];
+        Object.keys(novos).forEach((key) => {
+          const item = novos[key];
           if (item && item.ativo) {
-            var restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
+            const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
             if (restante !== item.tempoRestante) {
               mudou = true;
               novos[key] = {
@@ -105,13 +106,11 @@ export default function App() {
       });
     }, 1000);
 
-    return function () {
-      clearInterval(timer);
-    };
+    return () => clearInterval(timer);
   }, []);
 
-  async function configurarNotificacoes() {
-    var perm = await Notifications.getPermissionsAsync();
+  const configurarNotificacoes = async (): Promise<void> => {
+    const perm = await Notifications.getPermissionsAsync();
     if (perm.status !== 'granted') {
       await Notifications.requestPermissionsAsync();
     }
@@ -125,9 +124,9 @@ export default function App() {
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
-  }
+  };
 
-  async function agendarNotificacao(titulo: string, corpo: string, segundos: number) {
+  const agendarNotificacao = async (titulo: string, corpo: string, segundos: number): Promise<string | null> => {
     if (segundos <= 0) return null;
     try {
       return await Notifications.scheduleNotificationAsync({
@@ -145,137 +144,127 @@ export default function App() {
       console.warn('Erro ao agendar notificacao:', e);
       return null;
     }
-  }
+  };
 
-  async function agendarEventosAtivos(listaEventos: any[]) {
+  const agendarEventosAtivos = async (listaEventos: EventoFixo[]): Promise<void> => {
     await Notifications.cancelAllScheduledNotificationsAsync();
 
-    var diaAtual = agora.getDay();
-    var minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
-    var segundosAtuais = agora.getSeconds();
+    const diaAtual = agora.getDay();
+    const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
+    const segundosAtuais = agora.getSeconds();
 
-    for (var i = 0; i < listaEventos.length; i++) {
-      var ev = listaEventos[i];
-      if (ev.ativo && ev.dias && ev.dias.indexOf(diaAtual) !== -1) {
-        var partes = ev.inicio.split(':');
-        var iniMin = parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
+    for (let i = 0; i < listaEventos.length; i++) {
+      const ev = listaEventos[i];
+      if (ev.ativo && ev.dias && ev.dias.includes(diaAtual)) {
+        const partes = ev.inicio.split(':');
+        const iniMin = parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
         
-        var alvoMin = iniMin - 5; 
-        var diffSegundos = (alvoMin - minutosAtuais) * 60 - segundosAtuais;
+        const alvoMin = iniMin - 5; 
+        const diffSegundos = (alvoMin - minutosAtuais) * 60 - segundosAtuais;
 
         if (diffSegundos > 0) {
           await agendarNotificacao(
-            'Kira Alertas - ' + ev.nome,
-            ev.aviso ? ev.aviso : 'O evento ' + ev.nome + ' comeca em 5 minutos!',
+            `Kira Alertas - ${ev.nome}`,
+            ev.aviso ? ev.aviso : `O evento ${ev.nome} comeca em 5 minutos!`,
             diffSegundos
           );
         }
       }
     }
-  }
+  };
 
-  async function cancelarNotificacao(id: string | null) {
+  const cancelarNotificacao = async (id: string | null): Promise<void> => {
     if (id) {
       await Notifications.cancelScheduledNotificationAsync(id);
     }
-  }
+  };
 
-  async function alternarCooldown1h(slot: string) {
-    var key = slot + '_1h';
-    var estadoAtual = cooldowns[key];
+  const alternarCooldown1h = async (slot: string): Promise<void> => {
+    const key = `${slot}_1h`;
+    const estadoAtual = cooldowns[key];
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns(function (prev: any) {
-        var n = Object.assign({}, prev);
-        n[key] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
-        return n;
-      });
+      setCooldowns((prev) => ({
+        ...prev,
+        [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
+      }));
     } else {
-      var fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
-      var notifId = await agendarNotificacao(
+      const fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
+      const notifId = await agendarNotificacao(
         'Kira Alertas - Guilda',
         'Voce ja pode se juntar a proxima guilda',
         COOLDOWN_1H01
       );
 
-      setCooldowns(function (prev: any) {
-        var n = Object.assign({}, prev);
-        n[key] = { ativo: true, fimTimestamp: fimTimestamp, tempoRestante: COOLDOWN_1H01, notifId: notifId };
-        return n;
-      });
+      setCooldowns((prev) => ({
+        ...prev,
+        [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_1H01, notifId }
+      }));
     }
-  }
+  };
 
-  async function alternarCooldown24h(slot: string) {
-    var key = slot + '_24h';
-    var estadoAtual = cooldowns[key];
+  const alternarCooldown24h = async (slot: string): Promise<void> => {
+    const key = `${slot}_24h`;
+    const estadoAtual = cooldowns[key];
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns(function (prev: any) {
-        var n = Object.assign({}, prev);
-        n[key] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
-        return n;
-      });
+      setCooldowns((prev) => ({
+        ...prev,
+        [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
+      }));
     } else {
-      var fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
-      var notifId = await agendarNotificacao(
+      const fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
+      const notifId = await agendarNotificacao(
         'Kira Alertas - Alerta 24h',
         'Ja se passaram 24h desde a ultima guilda',
         COOLDOWN_24H
       );
 
-      setCooldowns(function (prev: any) {
-        var n = Object.assign({}, prev);
-        n[key] = { ativo: true, fimTimestamp: fimTimestamp, tempoRestante: COOLDOWN_24H, notifId: notifId };
-        return n;
-      });
+      setCooldowns((prev) => ({
+        ...prev,
+        [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_24H, notifId }
+      }));
     }
-  }
+  };
 
-  function adicionarEventoCustom() {
+  const adicionarEventoCustom = (): void => {
     if (!novoNome.trim() || !novoHorario.trim()) {
       Alert.alert('Atencao', 'Preencha o nome e o horario do evento.');
       return;
     }
 
-    var novo = {
+    const novo: EventoCustom = {
       id: Date.now().toString(),
       nome: novoNome.trim(),
       horario: novoHorario.trim()
     };
 
-    setEventosCustom(function (prev: any[]) {
-      return prev.concat([novo]);
-    });
+    setEventosCustom((prev) => [...prev, novo]);
     setNovoNome('');
     setNovoHorario('');
-  }
+  };
 
-  function removerEventoCustom(id: string) {
-    setEventosCustom(function (prev: any[]) {
-      return prev.filter(function (ev: any) {
-        return ev.id !== id;
-      });
-    });
-  }
+  const removerEventoCustom = (id: string): void => {
+    setEventosCustom((prev) => prev.filter((ev) => ev.id !== id));
+  };
 
-  function getMinutos(horarioStr: string) {
-    var partes = horarioStr.split(':');
+  const getMinutos = (horarioStr: string): number => {
+    const partes = horarioStr.split(':');
     return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
-  }
+  };
 
-  function getStatusEvento(ev: any) {
-    var diaAtual = agora.getDay();
-    if (ev.dias && ev.dias.indexOf(diaAtual) === -1) {
+  const getStatusEvento = (ev: EventoFixo): { status: string; tipoEstilo: string } => {
+    const diaAtual = agora.getDay();
+    if (ev.dias && !ev.dias.includes(diaAtual)) {
       return { status: 'HOJE NAO', tipoEstilo: 'desativado' };
     }
 
-    var minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
-    var segundosAtuais = agora.getSeconds();
-    var iniMin = getMinutos(ev.inicio);
-    var fimMin = ev.tipo === 'duracao' ? getMinutos(ev.fim) : iniMin + 5;
+    const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
+    const segundosAtuais = agora.getSeconds();
+    const iniMin = getMinutos(ev.inicio);
+    const fimMin = ev.tipo === 'duracao' ? getMinutos(ev.fim) : iniMin + 5;
 
     if (minutosAtuais >= iniMin && minutosAtuais < fimMin) {
       return { status: 'Em andamento', tipoEstilo: 'emAndamento' };
@@ -285,40 +274,40 @@ export default function App() {
       return { status: 'Concluido hoje', tipoEstilo: 'concluido' };
     }
 
-    var diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
-    var h = Math.floor(diffMinutosTotal / 3600);
-    var m = Math.floor((diffMinutosTotal % 3600) / 60);
-    var s = diffMinutosTotal % 60;
+    const diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
+    const h = Math.floor(diffMinutosTotal / 3600);
+    const m = Math.floor((diffMinutosTotal % 3600) / 60);
+    const s = diffMinutosTotal % 60;
 
-    var textoTempo = h > 0 ? h + 'h ' + m + 'm ' + s + 's' : m + 'm ' + s + 's';
-    return { status: 'Falta ' + textoTempo, tipoEstilo: 'pendente' };
-  }
+    const textoTempo = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+    return { status: `Falta ${textoTempo}`, tipoEstilo: 'pendente' };
+  };
 
-  function formatarTempo(segundos: number) {
-    var h = Math.floor(segundos / 3600);
-    var m = Math.floor((segundos % 3600) / 60);
-    var s = segundos % 60;
-    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-  }
+  const formatarTempo = (segundos: number): string => {
+    const h = Math.floor(segundos / 3600);
+    const m = Math.floor((segundos % 3600) / 60);
+    const s = segundos % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
 
-  function formatarRelogioDigital(dateObj: Date) {
-    var h = String(dateObj.getHours()).padStart(2, '0');
-    var m = String(dateObj.getMinutes()).padStart(2, '0');
-    var s = String(dateObj.getSeconds()).padStart(2, '0');
-    return h + ':' + m + ':' + s;
-  }
+  const formatarRelogioDigital = (dateObj: Date): string => {
+    const h = String(dateObj.getHours()).padStart(2, '0');
+    const m = String(dateObj.getMinutes()).padStart(2, '0');
+    const s = String(dateObj.getSeconds()).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
 
-  function renderSubAbaContent() {
+  const renderSubAbaContent = (): React.JSX.Element | null => {
     if (subAba === 'fixos') {
       return (
         <View>
           <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diarios:</Text>
           <View style={styles.timelineBox}>
-            {eventos.map(function (ev) {
-              var infoStatus = getStatusEvento(ev);
+            {eventos.map((ev) => {
+              const infoStatus = getStatusEvento(ev);
               
-              var badgeStyle = styles.badgePendente;
-              var badgeTextStyle = styles.badgeTextoPendente;
+              let badgeStyle: ViewStyle = styles.badgePendente;
+              let badgeTextStyle: TextStyle = styles.badgeTextoPendente;
 
               if (infoStatus.tipoEstilo === 'concluido') {
                 badgeStyle = styles.badgeConcluido;
@@ -336,7 +325,7 @@ export default function App() {
                   <View style={styles.cardTimelineInfo}>
                     <Text style={styles.cardTitulo}>{ev.nome}</Text>
                     <Text style={styles.cardHorario}>
-                      ⏰ {ev.tipo === 'duracao' ? ev.inicio + ' - ' + ev.fim : ev.inicio}
+                      ⏰ {ev.tipo === 'duracao' ? `${ev.inicio} - ${ev.fim}` : ev.inicio}
                     </Text>
                     {ev.aviso ? (
                       <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
@@ -354,8 +343,8 @@ export default function App() {
           <View style={styles.botoesAcaoRow}>
             <TouchableOpacity
               style={styles.btnAtivarTodas}
-              onPress={function () {
-                var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: true }); });
+              onPress={() => {
+                const novas = eventos.map((e) => ({ ...e, ativo: true }));
                 setEventos(novas);
                 agendarEventosAtivos(novas);
               }}
@@ -364,8 +353,8 @@ export default function App() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.btnDesativarTodas}
-              onPress={function () {
-                var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: false }); });
+              onPress={() => {
+                const novas = eventos.map((e) => ({ ...e, ativo: false }));
                 setEventos(novas);
                 Notifications.cancelAllScheduledNotificationsAsync();
               }}
@@ -374,31 +363,27 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          {eventos.map(function (ev) {
-            return (
-              <View key={ev.id} style={styles.cardToggle}>
-                <View style={styles.cardTimelineInfo}>
-                  <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                  <Text style={styles.cardSub}>
-                    Horario: {ev.tipo === 'duracao' ? ev.inicio + ' as ' + ev.fim : ev.inicio}
-                  </Text>
-                  <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
-                </View>
-                <Switch
-                  value={ev.ativo}
-                  onValueChange={function () {
-                    var novas = eventos.map(function (e) {
-                      return e.id === ev.id ? Object.assign({}, e, { ativo: !e.ativo }) : e;
-                    });
-                    setEventos(novas);
-                    agendarEventosAtivos(novas);
-                  }}
-                  trackColor={{ false: '#334155', true: '#059669' }}
-                  thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
-                />
+          {eventos.map((ev) => (
+            <View key={ev.id} style={styles.cardToggle}>
+              <View style={styles.cardTimelineInfo}>
+                <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                <Text style={styles.cardSub}>
+                  Horario: {ev.tipo === 'duracao' ? `${ev.inicio} as ${ev.fim}` : ev.inicio}
+                </Text>
+                <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
               </View>
-            );
-          })}
+              <Switch
+                value={ev.ativo}
+                onValueChange={() => {
+                  const novas = eventos.map((e) => e.id === ev.id ? { ...e, ativo: !e.ativo } : e);
+                  setEventos(novas);
+                  agendarEventosAtivos(novas);
+                }}
+                trackColor={{ false: '#334155', true: '#059669' }}
+                thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
+              />
+            </View>
+          ))}
         </View>
       );
     }
@@ -411,10 +396,10 @@ export default function App() {
             Slots final 1 possuem o controle adicional de 24h.
           </Text>
 
-          {DIAS_SLOTS.map(function (slot) {
-            var ehFinal1 = slot.indexOf('1', slot.length - 1) !== -1;
-            var info1h = cooldowns[slot + '_1h'] || { ativo: false, tempoRestante: 0 };
-            var info24h = cooldowns[slot + '_24h'] || { ativo: false, tempoRestante: 0 };
+          {DIAS_SLOTS.map((slot) => {
+            const ehFinal1 = slot.endsWith('1');
+            const info1h = cooldowns[`${slot}_1h`] || { ativo: false, tempoRestante: 0 };
+            const info24h = cooldowns[`${slot}_24h`] || { ativo: false, tempoRestante: 0 };
 
             return (
               <View key={slot} style={styles.cardSystemSlot}>
@@ -424,12 +409,12 @@ export default function App() {
                   <View style={styles.cardTimelineInfo}>
                     <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
                     <Text style={info1h.ativo ? styles.cardTimerAtivo : styles.cardSub}>
-                      {info1h.ativo ? '⏳ ' + formatarTempo(info1h.tempoRestante) : 'Inativo'}
+                      {info1h.ativo ? `⏳ ${formatarTempo(info1h.tempoRestante)}` : 'Inativo'}
                     </Text>
                   </View>
                   <Switch
                     value={Boolean(info1h.ativo)}
-                    onValueChange={function () { alternarCooldown1h(slot); }}
+                    onValueChange={() => alternarCooldown1h(slot)}
                     trackColor={{ false: '#334155', true: '#2563EB' }}
                     thumbColor={info1h.ativo ? '#3B82F6' : '#94A3B8'}
                   />
@@ -440,12 +425,12 @@ export default function App() {
                     <View style={styles.cardTimelineInfo}>
                       <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
                       <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
-                        {info24h.ativo ? '⌛ ' + formatarTempo(info24h.tempoRestante) : 'Inativo'}
+                        {info24h.ativo ? `⌛ ${formatarTempo(info24h.tempoRestante)}` : 'Inativo'}
                       </Text>
                     </View>
                     <Switch
                       value={Boolean(info24h.ativo)}
-                      onValueChange={function () { alternarCooldown24h(slot); }}
+                      onValueChange={() => alternarCooldown24h(slot)}
                       trackColor={{ false: '#334155', true: '#D97706' }}
                       thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
                     />
@@ -487,26 +472,24 @@ export default function App() {
           {eventosCustom.length === 0 ? (
             <Text style={styles.abaVaziaTexto}>Nenhum evento customizado adicionado.</Text>
           ) : (
-            eventosCustom.map(function (ev) {
-              return (
-                <View key={ev.id} style={styles.cardToggle}>
-                  <View style={styles.cardTimelineInfo}>
-                    <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                    <Text style={styles.cardSub}>Horario: {ev.horario}</Text>
-                  </View>
-                  <TouchableOpacity onPress={function () { removerEventoCustom(ev.id); }} style={styles.btnDeletar}>
-                    <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
-                  </TouchableOpacity>
+            eventosCustom.map((ev) => (
+              <View key={ev.id} style={styles.cardToggle}>
+                <View style={styles.cardTimelineInfo}>
+                  <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                  <Text style={styles.cardSub}>Horario: {ev.horario}</Text>
                 </View>
-              );
-            })
+                <TouchableOpacity onPress={() => removerEventoCustom(ev.id)} style={styles.btnDeletar}>
+                  <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
+                </TouchableOpacity>
+              </View>
+            ))
           )}
         </View>
       );
     }
 
     return null;
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -531,24 +514,36 @@ export default function App() {
             <View style={styles.subAbasContainer}>
               <TouchableOpacity
                 style={[styles.subAbaBtn, subAba === 'fixos' ? styles.subAbaBtnAtivo : null]}
-                onPress={function () { setSubAba('fixos'); }}
+                onPress={() => setSubAba('fixos')}
               >
                 <Text style={[styles.subAbaTexto, subAba === 'fixos' ? styles.subAbaTextoAtivo : null]}>Eventos Fixos</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.subAbaBtn, subAba === 'sistema' ? styles.subAbaBtnAtivo : null]}
-                onPress={function () { setSubAba('sistema'); }}
+                onPress={() => setSubAba('sistema')}
               >
                 <Text style={[styles.subAbaTexto, subAba === 'sistema' ? styles.subAbaTextoAtivo : null]}>Sistema</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.subAbaBtn, subAba === 'custom' ? styles.subAbaBtnAtivo : null]}
-                onPress={function () { setSubAba('custom'); }}
+                onPress={() => setSubAba('custom')}
               >
                 <Text style={[styles.subAbaTexto, subAba === 'custom' ? styles.subAbaTextoAtivo : null]}>Customizavel</Text>
               </TouchableOpacity>
             </View>
 
-          
+            {renderSubAbaContent()}
+          </View>
+        ) : (
+          <View style={styles.abaVaziaContainer}>
+            <Text style={styles.abaVaziaTexto}>Tela: {abaInferior.toUpperCase()}</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      <View style={styles.navBottom}>
+        <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('gerador')}>
+          <Text style={styles.navIcon}>⚡</Text>
+          <Text style={[styles.navText, abaInferior === 
