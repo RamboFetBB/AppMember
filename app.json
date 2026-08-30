@@ -4,21 +4,11 @@
     "slug": "Alertas-PokeMembros",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B132B"
-    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#0B132B"
-      },
       "package": "com.alertas.pokemembros",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
@@ -30,7 +20,6 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
           "color": "#2563EB",
           "sounds": []
         }
