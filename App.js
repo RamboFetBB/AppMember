@@ -8,7 +8,6 @@ import {
   StatusBar
 } from 'react-native';
 
-// Importação apenas das telas mantidas
 import EventosFixosScreen from './src/screens/EventosFixosScreen';
 import NotificacoesPersonalizadasScreen from './src/screens/NotificacoesPersonalizadasScreen';
 import CooldownGuildaScreen from './src/screens/CooldownGuildaScreen';
@@ -33,17 +32,17 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1e293b" />
       
-      {/* Cabeçalho do App */}
+      {/* Cabeçalho */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Alertas Poke_membros</Text>
       </View>
 
-      {/* Área do Conteúdo Principal */}
+      {/* Conteúdo Central */}
       <View style={styles.content}>
         {renderContent()}
       </View>
 
-      {/* Menu Inferior (Apenas as 3 funções liberadas) */}
+      {/* Menu Inferior */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'eventos' && styles.activeTabButton]}
@@ -123,4 +122,3 @@ const styles = StyleSheet.create({
     color: '#38bdf8',
   },
 });
-    
