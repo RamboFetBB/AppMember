@@ -57,11 +57,11 @@ export default function App() {
   var agora = stateAgora[0];
   var setAgora = stateAgora[1];
 
-  var stateCooldowns = useState({});
+  var stateCooldowns = useState<Record<string, any>>({});
   var cooldowns = stateCooldowns[0];
   var setCooldowns = stateCooldowns[1];
 
-  var stateEventosCustom = useState([]);
+  var stateEventosCustom = useState<any[]>([]);
   var eventosCustom = stateEventosCustom[0];
   var setEventosCustom = stateEventosCustom[1];
 
@@ -80,7 +80,7 @@ export default function App() {
       setAgora(agoraAtual);
 
       var agoraMs = agoraAtual.getTime();
-      setCooldowns(function (prev) {
+      setCooldowns(function (prev: any) {
         var mudou = false;
         var novos = Object.assign({}, prev);
 
@@ -116,7 +116,7 @@ export default function App() {
     }
   }
 
-  async function agendarNotificacao(titulo, corpo, segundos) {
+  async function agendarNotificacao(titulo: string, corpo: string, segundos: number) {
     try {
       return await Notifications.scheduleNotificationAsync({
         content: { title: titulo, body: corpo, sound: true },
@@ -128,19 +128,19 @@ export default function App() {
     }
   }
 
-  async function cancelarNotificacao(id) {
+  async function cancelarNotificacao(id: string | null) {
     if (id) {
       await Notifications.cancelScheduledNotificationAsync(id);
     }
   }
 
-  async function alternarCooldown1h(slot) {
+  async function alternarCooldown1h(slot: string) {
     var key = slot + '_1h';
     var estadoAtual = cooldowns[key];
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns(function (prev) {
+      setCooldowns(function (prev: any) {
         var n = Object.assign({}, prev);
         n[key] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
         return n;
@@ -153,7 +153,7 @@ export default function App() {
         COOLDOWN_1H01
       );
 
-      setCooldowns(function (prev) {
+      setCooldowns(function (prev: any) {
         var n = Object.assign({}, prev);
         n[key] = { ativo: true, fimTimestamp: fimTimestamp, tempoRestante: COOLDOWN_1H01, notifId: notifId };
         return n;
@@ -161,13 +161,13 @@ export default function App() {
     }
   }
 
-  async function alternarCooldown24h(slot) {
+  async function alternarCooldown24h(slot: string) {
     var key = slot + '_24h';
     var estadoAtual = cooldowns[key];
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns(function (prev) {
+      setCooldowns(function (prev: any) {
         var n = Object.assign({}, prev);
         n[key] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
         return n;
@@ -180,7 +180,7 @@ export default function App() {
         COOLDOWN_24H
       );
 
-      setCooldowns(function (prev) {
+      setCooldowns(function (prev: any) {
         var n = Object.assign({}, prev);
         n[key] = { ativo: true, fimTimestamp: fimTimestamp, tempoRestante: COOLDOWN_24H, notifId: notifId };
         return n;
@@ -200,27 +200,27 @@ export default function App() {
       horario: novoHorario.trim()
     };
 
-    setEventosCustom(function (prev) {
+    setEventosCustom(function (prev: any[]) {
       return prev.concat([novo]);
     });
     setNovoNome('');
     setNovoHorario('');
   }
 
-  function removerEventoCustom(id) {
-    setEventosCustom(function (prev) {
-      return prev.filter(function (ev) {
+  function removerEventoCustom(id: string) {
+    setEventosCustom(function (prev: any[]) {
+      return prev.filter(function (ev: any) {
         return ev.id !== id;
       });
     });
   }
 
-  function getMinutos(horarioStr) {
+  function getMinutos(horarioStr: string) {
     var partes = horarioStr.split(':');
     return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
   }
 
-  function getStatusEvento(ev) {
+  function getStatusEvento(ev: any) {
     var diaAtual = agora.getDay();
     if (ev.dias && ev.dias.indexOf(diaAtual) === -1) {
       return { status: 'HOJE NAO', cor: '#475569' };
@@ -248,7 +248,7 @@ export default function App() {
     return { status: 'Proximo (em ' + textoTempo + ')', cor: '#EAB308' };
   }
 
-  function formatarTempo(segundos) {
+  function formatarTempo(segundos: number) {
     var h = Math.floor(segundos / 3600);
     var m = Math.floor((segundos % 3600) / 60);
     var s = segundos % 60;
@@ -509,12 +509,3 @@ export default function App() {
 
 var styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#0B132B'
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#1C2541'
-  },
-  head
