@@ -6,13 +6,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
+  TextInput,
   SafeAreaView,
   StatusBar,
   Alert
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
-// Configura o handler para exibir alerta sonoro e visual mesmo com o app aberto
+// Exibe notificações mesmo com o app aberto
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -34,7 +35,8 @@ const DIAS_SLOTS = [
   'Qui1', 'Qui2', 'Sex1', 'Sex2', 'Sab1', 'Sab2', 'Dom1', 'Dom2'
 ];
 
-const COOLDOWN_TEMPO = 61 * 60; // 1 hora e 1 minuto (3660 segundos)
+const COOLDOWN_1H01 = 61 * 60; // 1 hora e 1 minuto (3660s)
+const COOLDOWN_24H = 24 * 60 * 60; // 24 horas (86400s)
 
 export default function App() {
   const [abaInferior, setAbaInferior] = useState('gerador');
@@ -42,9 +44,13 @@ export default function App() {
   const [eventos, setEventos] = useState(EVENTOS_FIXOS_INICIAIS);
   const [agora, setAgora] = useState(new Date());
 
-  // Estado dos temporizadores de cooldown (Sistema)
-  // Estrutura: { Seg1: { ativo: boolean, fimTimestamp: number, tempoRestante: number, notifId: string } }
+  // Estados dos temporizadores da aba Sistema
   const [cooldowns, setCooldowns] = useState({});
+
+  // Estados da aba Customizável
+  const [eventosCustom, setEventosCustom] = useState([]);
+  const [novoNome, setNovoNome] = useState('');
+  const [novoHorario, setNovoHorario] = useState('');
 
   useEffect(() => {
     configurarNotificacoes();
@@ -62,91 +68,118 @@ export default function App() {
     }
   }
 
-  // Agendar Notificação no Sistema Operacional
   async function agendarNotificacao(titulo, corpo, segundos) {
     try {
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: titulo,
-          body: corpo,
-          sound: true,
-        },
-        trigger: {
-          seconds: segundos,
-        },
+      return await Notifications.scheduleNotificationAsync({
+        content: { title: titulo, body: corpo, sound: true },
+        trigger: { seconds: segundos },
       });
-      return id;
     } catch (e) {
       console.warn("Erro ao agendar notificação:", e);
       return null;
     }
   }
 
-  // Cancelar Notificação Agendada
   async function cancelarNotificacao(id) {
-    if (id) {
-      await Notifications.cancelScheduledNotificationAsync(id);
-    }
+    if (id) await Notifications.cancelScheduledNotificationAsync(id);
   }
 
-  // Atualizar a contagem dos temporizadores em tempo real
   function atualizarTemporizadores() {
     const agoraMs = Date.now();
     let mudou = false;
     const novosCooldowns = { ...cooldowns };
 
-    Object.keys(novosCooldowns).forEach(slot => {
-      const item = novosCooldowns[slot];
+    Object.keys(novosCooldowns).forEach(key => {
+      const item = novosCooldowns[key];
       if (item && item.ativo) {
         const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
         if (restante !== item.tempoRestante) {
           mudou = true;
-          novosCooldowns[slot].tempoRestante = restante;
-          if (restante === 0) {
-            novosCooldowns[slot].ativo = false;
-          }
+          novosCooldowns[key].tempoRestante = restante;
+          if (restante === 0) novosCooldowns[key].ativo = false;
         }
       }
     });
 
-    if (mudou) {
-      setCooldowns(novosCooldowns);
-    }
+    if (mudou) setCooldowns(novosCooldowns);
   }
 
-  // Ativar ou desativar o temporizador de 1h 01m de um Slot específico
-  async function alternarCooldownSlot(slot) {
-    const estadoAtual = cooldowns[slot];
+  // Toggle do timer de 1h01m para qualquer Slot
+  async function alternarCooldown1h(slot) {
+    const key = `${slot}_1h`;
+    const estadoAtual = cooldowns[key];
 
     if (estadoAtual && estadoAtual.ativo) {
-      // Cancelar
       await cancelarNotificacao(estadoAtual.notifId);
       setCooldowns(prev => ({
         ...prev,
-        [slot]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
+        [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
       }));
     } else {
-      // Ativar temporizador de 1h 01m
-      const fimTimestamp = Date.now() + COOLDOWN_TEMPO * 1000;
+      const fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
       const notifId = await agendarNotificacao(
-        "Guilda - Cooldown Concluído!",
+        "Kira Alertas - Guilda",
         "Você já pode se juntar a próxima guilda",
-        COOLDOWN_TEMPO
+        COOLDOWN_1H01
       );
 
       setCooldowns(prev => ({
         ...prev,
-        [slot]: {
-          ativo: true,
-          fimTimestamp,
-          tempoRestante: COOLDOWN_TEMPO,
-          notifId
-        }
+        [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_1H01, notifId }
       }));
     }
   }
 
-  // Auxiliares da Timeline
+  // Toggle do timer de 24h exclusivo para slots final 1
+  async function alternarCooldown24h(slot) {
+    const key = `${slot}_24h`;
+    const estadoAtual = cooldowns[key];
+
+    if (estadoAtual && estadoAtual.ativo) {
+      await cancelarNotificacao(estadoAtual.notifId);
+      setCooldowns(prev => ({
+        ...prev,
+        [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
+      }));
+    } else {
+      const fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
+      const notifId = await agendarNotificacao(
+        "Kira Alertas - Alerta 24h",
+        "Já passou 24h desde a última guilda",
+        COOLDOWN_24H
+      );
+
+      setCooldowns(prev => ({
+        ...prev,
+        [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_24H, notifId }
+      }));
+    }
+  }
+
+  // Adicionar Evento Customizado
+  async function adicionarEventoCustom() {
+    if (!novoNome.trim() || !novoHorario.trim()) {
+      Alert.alert("Atenção", "Preencha o nome e o horário do evento.");
+      return;
+    }
+
+    const novo = {
+      id: Date.now().toString(),
+      nome: novoNome.trim(),
+      horario: novoHorario.trim(),
+      ativo: true,
+    };
+
+    setEventosCustom(prev => [...prev, novo]);
+    setNovoNome('');
+    setNovoHorario('');
+  }
+
+  function removerEventoCustom(id) {
+    setEventosCustom(prev => prev.filter(ev => ev.id !== id));
+  }
+
+  // Cálculo da Timeline com Segundos Exibidos
   function getMinutos(horarioStr) {
     const [h, m] = horarioStr.split(':').map(Number);
     return h * 60 + m;
@@ -166,34 +199,15 @@ export default function App() {
       return { status: 'CONCLUÍDO', cor: '#64748B' };
     }
 
-    const diffMinutos = iniMin - minutosAtuais - 1;
-    const diffSegundos = 60 - segundosAtuais;
-    const horasRestantes = Math.floor(diffMinutos / 60);
-    const minsRestantes = diffMinutos % 60;
+    const diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
+    const h = Math.floor(diffMinutosTotal / 3600);
+    const m = Math.floor((diffMinutosTotal % 3600) / 60);
+    const s = diffMinutosTotal % 60;
 
-    let textoTempo = '';
-    if (horasRestantes > 0) {
-      textoTempo = `(em ${horasRestantes}h ${minsRestantes}m)`;
-    } else {
-      textoTempo = `(em ${minsRestantes}m ${diffSegundos}s)`;
-    }
-
-    return { status: `Próximo ${textoTempo}`, cor: '#EAB308' };
+    let textoTempo = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+    return { status: `Próximo (em ${textoTempo})`, cor: '#EAB308' };
   }
 
-  // Toggles de notificações fixas
-  async function alternarTodosFixos(ativo) {
-    setEventos(prev => prev.map(ev => ({ ...ev, ativo })));
-    if (ativo) {
-      Alert.alert("Notificações", "Alertas para eventos fixos ativados.");
-    }
-  }
-
-  function alternarEventoFixo(id) {
-    setEventos(prev => prev.map(ev => ev.id === id ? { ...ev, ativo: !ev.ativo } : ev));
-  }
-
-  // Formatação em HH:MM:SS para o cooldown
   function formatarTempo(segundos) {
     const h = Math.floor(segundos / 3600);
     const m = Math.floor((segundos % 3600) / 60);
@@ -205,15 +219,12 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
 
-      {/* Header */}
+      {/* Header Atualizado */}
       <View style={styles.header}>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerEmoji}>🛡️</Text>
-          <Text style={styles.headerTitle}>GvG Dev Manager</Text>
+          <Text style={styles.headerTitle}>Kira Alertas Sistema</Text>
         </View>
-        <TouchableOpacity style={styles.btnEnviarHoje}>
-          <Text style={styles.btnEnviarHojeTexto}>⌛ Enviar Hoje</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -245,7 +256,7 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* ABA 1: EVENTOS FIXOS */}
+            {/* ABA FIXOS */}
             {subAba === 'fixos' && (
               <>
                 <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
@@ -270,10 +281,10 @@ export default function App() {
 
                 <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m antes):</Text>
                 <View style={styles.botoesAcaoRow}>
-                  <TouchableOpacity style={styles.btnAtivarTodas} onPress={() => alternarTodosFixos(true)}>
+                  <TouchableOpacity style={styles.btnAtivarTodas} onPress={() => setEventos(prev => prev.map(e => ({ ...e, ativo: true })))}>
                     <Text style={styles.btnAcaoTexto}>🔔 Ativar Todas</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.btnDesativarTodas} onPress={() => alternarTodosFixos(false)}>
+                  <TouchableOpacity style={styles.btnDesativarTodas} onPress={() => setEventos(prev => prev.map(e => ({ ...e, ativo: false })))}>
                     <Text style={styles.btnAcaoTexto}>🔕 Desativar Todas</Text>
                   </TouchableOpacity>
                 </View>
@@ -289,7 +300,7 @@ export default function App() {
                     </View>
                     <Switch
                       value={ev.ativo}
-                      onValueChange={() => alternarEventoFixo(ev.id)}
+                      onValueChange={() => setEventos(prev => prev.map(e => e.id === ev.id ? { ...e, ativo: !e.ativo } : e))}
                       trackColor={{ false: '#334155', true: '#059669' }}
                       thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
                     />
@@ -298,43 +309,103 @@ export default function App() {
               </>
             )}
 
-            {/* ABA 2: SISTEMA (SLOTS SEG1 A DOM2 + COOLDOWN 1H01M) */}
+            {/* ABA SISTEMA: SLOTS 1H01M E 24H */}
             {subAba === 'sistema' && (
               <View>
-                <Text style={styles.secaoHeader}>⏳ Cooldown de Troca de Guilda (1h 01m):</Text>
+                <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
                 <Text style={styles.subTituloInstrucao}>
-                  Ative o botão ao sair de uma guilda para iniciar a contagem. O app emitirá a notificação "Você já pode se juntar a próxima guilda".
+                  Nos slots final 1 você pode ativar tanto o timer de 1h01m quanto o timer de 24h.
                 </Text>
 
                 {DIAS_SLOTS.map(slot => {
-                  const infoSlot = cooldowns[slot] || { ativo: false, tempoRestante: 0 };
+                  const ehFinal1 = slot.endsWith('1');
+                  const info1h = cooldowns[`${slot}_1h`] || { ativo: false, tempoRestante: 0 };
+                  const info24h = cooldowns[`${slot}_24h`] || { ativo: false, tempoRestante: 0 };
+
                   return (
-                    <View key={slot} style={styles.cardToggle}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.cardTitulo}>Slot {slot}</Text>
-                        <Text style={infoSlot.ativo ? styles.cardTimerAtivo : styles.cardSub}>
-                          {infoSlot.ativo
-                            ? `⏳ Restante: ${formatarTempo(infoSlot.tempoRestante)}`
-                            : 'Pronto para iniciar contagem'}
-                        </Text>
+                    <View key={slot} style={styles.cardSystemSlot}>
+                      <Text style={styles.cardTitulo}>Slot {slot}</Text>
+
+                      {/* Control 1h01m */}
+                      <View style={styles.rowSystemControl}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
+                          <Text style={info1h.ativo ? styles.cardTimerAtivo : styles.cardSub}>
+                            {info1h.ativo ? `⏳ ${formatarTempo(info1h.tempoRestante)}` : 'Inativo'}
+                          </Text>
+                        </View>
+                        <Switch
+                          value={!!info1h.ativo}
+                          onValueChange={() => alternarCooldown1h(slot)}
+                          trackColor={{ false: '#334155', true: '#2563EB' }}
+                          thumbColor={info1h.ativo ? '#3B82F6' : '#94A3B8'}
+                        />
                       </View>
-                      <Switch
-                        value={!!infoSlot.ativo}
-                        onValueChange={() => alternarCooldownSlot(slot)}
-                        trackColor={{ false: '#334155', true: '#2563EB' }}
-                        thumbColor={infoSlot.ativo ? '#3B82F6' : '#94A3B8'}
-                      />
+
+                      {/* Control 24h Exclusivo para Final 1 */}
+                      {ehFinal1 && (
+                        <View style={[styles.rowSystemControl, { marginTop: 10, borderTopWidth: 1, borderTopColor: '#2A365C', paddingTop: 8 }]}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
+                            <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
+                              {info24h.ativo ? `⌛ ${formatarTempo(info24h.tempoRestante)}` : 'Inativo'}
+                            </Text>
+                          </View>
+                          <Switch
+                            value={!!info24h.ativo}
+                            onValueChange={() => alternarCooldown24h(slot)}
+                            trackColor={{ false: '#334155', true: '#D97706' }}
+                            thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
+                          />
+                        </View>
+                      )}
                     </View>
                   );
                 })}
               </View>
             )}
 
-            {/* ABA 3: CUSTOMIZÁVEL */}
+            {/* ABA CUSTOMIZÁVEL COMPLETA */}
             {subAba === 'custom' && (
-              <View style={styles.abaVaziaContainer}>
-                <Text style={styles.secaoHeader}>🛠️ Notificações Customizadas</Text>
-                <Text style={styles.abaVaziaTexto}>Adicione e programe lembretes personalizados para a sua guilda.</Text>
+              <View>
+                <Text style={styles.secaoHeader}>🛠️ Criar Alerta Customizado:</Text>
+
+                <View style={styles.formCustomBox}>
+                  <TextInput
+                    style={styles.inputCustom}
+                    placeholder="Nome do Evento (ex: Guerra de Castelo)"
+                    placeholderTextColor="#64748B"
+                    value={novoNome}
+                    onChangeText={setNovoNome}
+                  />
+                  <TextInput
+                    style={styles.inputCustom}
+                    placeholder="Horário (ex: 20:30)"
+                    placeholderTextColor="#64748B"
+                    value={novoHorario}
+                    onChangeText={setNovoHorario}
+                  />
+                  <TouchableOpacity style={styles.btnAdicionarCustom} onPress={adicionarEventoCustom}>
+                    <Text style={styles.btnAcaoTexto}>➕ Adicionar Alerta</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.secaoHeader}>📋 Seus Eventos Customizados:</Text>
+                {eventosCustom.length === 0 ? (
+                  <Text style={styles.abaVaziaTexto}>Nenhum evento customizado adicionado.</Text>
+                ) : (
+                  eventosCustom.map(ev => (
+                    <View key={ev.id} style={styles.cardToggle}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                        <Text style={styles.cardSub}>Horário: {ev.horario}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => removerEventoCustom(ev.id)} style={styles.btnDeletar}>
+                        <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
               </View>
             )}
 
@@ -378,10 +449,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B132B',
-  },
+  container: { flex: 1, backgroundColor: '#0B132B' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -390,34 +458,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#1C2541',
   },
-  headerTitleBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerEmoji: {
-    fontSize: 18,
-    marginRight: 8,
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  btnEnviarHoje: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  btnEnviarHojeTexto: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  scrollContent: {
-    padding: 14,
-    paddingBottom: 80,
-  },
+  headerTitleBox: { flexDirection: 'row', alignItems: 'center' },
+  headerEmoji: { fontSize: 18, marginRight: 8 },
+  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+  scrollContent: { padding: 14, paddingBottom: 80 },
   painelContainer: {
     backgroundColor: '#111C38',
     borderRadius: 12,
@@ -425,12 +469,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1E293B',
   },
-  painelTitulo: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
+  painelTitulo: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   subAbasContainer: {
     flexDirection: 'row',
     backgroundColor: '#0B132B',
@@ -438,38 +477,13 @@ const styles = StyleSheet.create({
     padding: 4,
     marginBottom: 16,
   },
-  subAbaBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  subAbaBtnAtivo: {
-    backgroundColor: '#2563EB',
-  },
-  subAbaTexto: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  subAbaTextoAtivo: {
-    color: '#FFFFFF',
-  },
-  secaoHeader: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 10,
-  },
-  subTituloInstrucao: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginBottom: 12,
-  },
-  timelineBox: {
-    marginBottom: 16,
-  },
+  subAbaBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
+  subAbaBtnAtivo: { backgroundColor: '#2563EB' },
+  subAbaTexto: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
+  subAbaTextoAtivo: { color: '#FFFFFF' },
+  secaoHeader: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', marginTop: 8, marginBottom: 10 },
+  subTituloInstrucao: { color: '#94A3B8', fontSize: 12, marginBottom: 12 },
+  timelineBox: { marginBottom: 16 },
   cardTimeline: {
     backgroundColor: '#1C2541',
     borderRadius: 8,
@@ -481,111 +495,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2A365C',
   },
-  cardTitulo: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  cardHorario: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  badgeStatus: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  badgeStatusTexto: {
-    color: '#000000',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  botoesAcaoRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  btnAtivarTodas: {
-    flex: 1,
-    backgroundColor: '#2563EB',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  btnDesativarTodas: {
-    flex: 1,
-    backgroundColor: '#334155',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  btnAcaoTexto: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  cardToggle: {
-    backgroundColor: '#1C2541',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2A365C',
-  },
-  cardSub: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  cardTimerAtivo: {
-    color: '#38BDF8',
-    fontSize: 13,
-    fontWeight: 'bold',
-    marginTop: 2,
-  },
-  cardNotiInfo: {
-    color: '#10B981',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  abaVaziaContainer: {
-    padding: 30,
-    alignItems: 'center',
-  },
-  abaVaziaTexto: {
-    color: '#94A3B8',
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  navBottom: {
-    flexDirection: 'row',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#0B132B',
-    borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    paddingVertical: 8,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  navIcon: {
-    fontSize: 16,
-  },
-  navText: {
-    color: '#64748B',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  navTextAtivo: {
-    color: '#3B82F6',
-    fontWeight: 'bold',
-  },
-});
+  cardTitulo: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
+  cardHorario: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  badgeStatus: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  badgeStatusTexto: { color: '#000000', fontSize: 11, fontWeight: 'bold' },
+  botoesAcaoRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  btnAtivarTodas: { flex: 1, backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  btnDesativarTodas: { f
