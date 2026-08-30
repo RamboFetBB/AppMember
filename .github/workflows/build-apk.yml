@@ -22,8 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: 'npm'
+          node-version: 20
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -34,7 +33,7 @@ jobs:
       - name: Setup EAS CLI
         run: npm install -g eas-cli
 
-      - name: Install dependencies (clean install)
+      - name: Install dependencies
         run: |
           npm cache clean --force
           npm install --force
