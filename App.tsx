@@ -509,3 +509,275 @@ export default function App() {
 
 var styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#0B132B'
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#1C2541'
+  },
+  headerTitleBox: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  headerEmoji: {
+    fontSize: 18,
+    marginRight: 8
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold'
+  },
+  scrollContent: {
+    padding: 14,
+    paddingBottom: 80
+  },
+  painelContainer: {
+    backgroundColor: '#111C38',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#1E293B'
+  },
+  painelTitulo: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12
+  },
+  subAbasContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0B132B',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 16
+  },
+  subAbaBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6
+  },
+  subAbaBtnAtivo: {
+    backgroundColor: '#2563EB'
+  },
+  subAbaTexto: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  subAbaTextoAtivo: {
+    color: '#FFFFFF'
+  },
+  secaoHeader: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 8,
+    marginBottom: 10
+  },
+  subTituloInstrucao: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginBottom: 12
+  },
+  timelineBox: {
+    marginBottom: 16
+  },
+  cardTimeline: {
+    backgroundColor: '#1C2541',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2A365C'
+  },
+  cardTimelineInfo: {
+    flex: 1
+  },
+  cardTitulo: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold'
+  },
+  cardHorario: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 4
+  },
+  cardAvisoTexto: {
+    color: '#38BDF8',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '600'
+  },
+  badgeStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6
+  },
+  badgeStatusTexto: {
+    color: '#000000',
+    fontSize: 11,
+    fontWeight: 'bold'
+  },
+  botoesAcaoRow: {
+    flexDirection: 'row',
+    marginBottom: 16
+  },
+  btnAtivarTodas: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginRight: 5
+  },
+  btnDesativarTodas: {
+    flex: 1,
+    backgroundColor: '#334155',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginLeft: 5
+  },
+  btnAcaoTexto: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 13
+  },
+  cardToggle: {
+    backgroundColor: '#1C2541',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2A365C'
+  },
+  cardSystemSlot: {
+    backgroundColor: '#1C2541',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#2A365C'
+  },
+  rowSystemControl: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6
+  },
+  rowSystemControlDivider: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#2A365C',
+    paddingTop: 8
+  },
+  cardSubLabel: {
+    color: '#94A3B8',
+    fontSize: 12
+  },
+  cardSub: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: 2
+  },
+  cardTimerAtivo: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginTop: 2
+  },
+  cardTimerAtivo24: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginTop: 2
+  },
+  cardNotiInfo: {
+    color: '#10B981',
+    fontSize: 11,
+    marginTop: 4
+  },
+  formCustomBox: {
+    backgroundColor: '#1C2541',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16
+  },
+  inputCustom: {
+    backgroundColor: '#0B132B',
+    color: '#FFFFFF',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#334155'
+  },
+  btnAdicionarCustom: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 6,
+    alignItems: 'center'
+  },
+  btnDeletar: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6
+  },
+  btnDeletarTexto: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold'
+  },
+  abaVaziaContainer: {
+    padding: 30,
+    alignItems: 'center'
+  },
+  abaVaziaTexto: {
+    color: '#94A3B8',
+    fontSize: 13,
+    textAlign: 'center'
+  },
+  navBottom: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0B132B',
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    paddingVertical: 8
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  navIcon: {
+    fontSize: 16
+  },
+  navText: {
+    color: '#64748B',
+    fontSize: 10,
+    marginTop: 2
+  },
+  navTextAtivo: {
+    color: '#3B82F6',
+    fontWeight: 'bold'
+  }
+});
