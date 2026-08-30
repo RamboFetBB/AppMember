@@ -28,7 +28,7 @@ jobs:
         run: npm install
 
       - name: Gerar Projeto Android Nativo (Expo Prebuild)
-        run: npx expo prebuild --platform android
+        run: npx expo prebuild --platform android --no-install
 
       - name: Gerar APK de Debug
         run: |
