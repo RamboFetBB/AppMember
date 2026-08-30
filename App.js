@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
-// Exibe notificações mesmo com o app aberto
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -36,8 +35,8 @@ const DIAS_SLOTS = [
   'Qui1', 'Qui2', 'Sex1', 'Sex2', 'Sab1', 'Sab2', 'Dom1', 'Dom2'
 ];
 
-const COOLDOWN_1H01 = 61 * 60; // 1h01m em segundos
-const COOLDOWN_24H = 24 * 60 * 60; // 24h em segundos
+const COOLDOWN_1H01 = 61 * 60;
+const COOLDOWN_24H = 24 * 60 * 60;
 
 export default function App() {
   const [abaInferior, setAbaInferior] = useState('gerador');
@@ -45,10 +44,8 @@ export default function App() {
   const [eventos, setEventos] = useState(EVENTOS_FIXOS_INICIAIS);
   const [agora, setAgora] = useState(new Date());
 
-  // Cooldowns da aba Sistema
   const [cooldowns, setCooldowns] = useState({});
 
-  // Form da aba Customizável
   const [eventosCustom, setEventosCustom] = useState([]);
   const [novoNome, setNovoNome] = useState('');
   const [novoHorario, setNovoHorario] = useState('');
@@ -186,7 +183,7 @@ export default function App() {
   }
 
   function getStatusEvento(ev) {
-    const diaAtual = agora.getDay(); // 0 = Domingo, 6 = Sábado
+    const diaAtual = agora.getDay();
     if (ev.dias && !ev.dias.includes(diaAtual)) {
       return { status: 'HOJE NÃO', cor: '#475569' };
     }
@@ -224,7 +221,6 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
 
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerEmoji}>🛡️</Text>
@@ -237,7 +233,6 @@ export default function App() {
           <View style={styles.painelContainer}>
             <Text style={styles.painelTitulo}>🔔 Painel de Notificações</Text>
 
-            {/* Sub-Abas */}
             <View style={styles.subAbasContainer}>
               <TouchableOpacity
                 style={[styles.subAbaBtn, subAba === 'fixos' && styles.subAbaBtnAtivo]}
@@ -261,7 +256,6 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* ABA FIXOS */}
             {subAba === 'fixos' && (
               <View>
                 <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
@@ -270,14 +264,14 @@ export default function App() {
                     const infoStatus = getStatusEvento(ev);
                     return (
                       <View key={ev.id} style={styles.cardTimeline}>
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.cardTimelineInfo}>
                           <Text style={styles.cardTitulo}>{ev.nome}</Text>
                           <Text style={styles.cardHorario}>
                             ⏰ {ev.tipo === 'duracao' ? `${ev.inicio} - ${ev.fim}` : ev.inicio}
                           </Text>
-                          {ev.aviso && (
+                          {ev.aviso ? (
                             <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
-                          )}
+                          ) : null}
                         </View>
                         <View style={[styles.badgeStatus, { backgroundColor: infoStatus.cor }]}>
                           <Text style={styles.badgeStatusTexto}>{infoStatus.status}</Text>
@@ -299,7 +293,7 @@ export default function App() {
 
                 {eventos.map(ev => (
                   <View key={ev.id} style={styles.cardToggle}>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.cardTimelineInfo}>
                       <Text style={styles.cardTitulo}>{ev.nome}</Text>
                       <Text style={styles.cardSub}>
                         Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
@@ -317,7 +311,6 @@ export default function App() {
               </View>
             )}
 
-            {/* ABA SISTEMA */}
             {subAba === 'sistema' && (
               <View>
                 <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
@@ -335,7 +328,7 @@ export default function App() {
                       <Text style={styles.cardTitulo}>Slot {slot}</Text>
 
                       <View style={styles.rowSystemControl}>
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.cardTimelineInfo}>
                           <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
                           <Text style={info1h.ativo ? styles.cardTimerAtivo : styles.cardSub}>
                             {info1h.ativo ? `⏳ ${formatarTempo(info1h.tempoRestante)}` : 'Inativo'}
@@ -349,9 +342,9 @@ export default function App() {
                         />
                       </View>
 
-                      {ehFinal1 && (
-                        <View style={[styles.rowSystemControl, { marginTop: 10, borderTopWidth: 1, borderTopColor: '#2A365C', paddingTop: 8 }]}>
-                          <View style={{ flex: 1 }}>
+                      {ehFinal1 ? (
+                        <View style={styles.rowSystemControlDivider}>
+                          <View style={styles.cardTimelineInfo}>
                             <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
                             <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
                               {info24h.ativo ? `⌛ ${formatarTempo(info24h.tempoRestante)}` : 'Inativo'}
@@ -364,14 +357,13 @@ export default function App() {
                             thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
                           />
                         </View>
-                      )}
+                      ) : null}
                     </View>
                   );
                 })}
               </View>
             )}
 
-            {/* ABA CUSTOMIZÁVEL */}
             {subAba === 'custom' && (
               <View>
                 <Text style={styles.secaoHeader}>🛠️ Criar Alerta Customizado:</Text>
@@ -402,7 +394,7 @@ export default function App() {
                 ) : (
                   eventosCustom.map(ev => (
                     <View key={ev.id} style={styles.cardToggle}>
-                      <View style={{ flex: 1 }}>
+                      <View style={styles.cardTimelineInfo}>
                         <Text style={styles.cardTitulo}>{ev.nome}</Text>
                         <Text style={styles.cardSub}>Horário: {ev.horario}</Text>
                       </View>
@@ -423,7 +415,6 @@ export default function App() {
         )}
       </ScrollView>
 
-      {/* Navegação Inferior */}
       <View style={styles.navBottom}>
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('gerador')}>
           <Text style={styles.navIcon}>⚡</Text>
@@ -455,38 +446,84 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B132B' },
+  container: {
+    flex: 1,
+    backgroundColor: '#0B132B'
+  },
   header: {
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#1C2541',
+    backgroundColor: '#1C2541'
   },
-  headerTitleBox: { flexDirection: 'row', alignItems: 'center' },
-  headerEmoji: { fontSize: 18, marginRight: 8 },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
-  scrollContent: { padding: 14, paddingBottom: 80 },
+  headerTitleBox: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  headerEmoji: {
+    fontSize: 18,
+    marginRight: 8
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold'
+  },
+  scrollContent: {
+    padding: 14,
+    paddingBottom: 80
+  },
   painelContainer: {
     backgroundColor: '#111C38',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#1E293B'
   },
-  painelTitulo: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  painelTitulo: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12
+  },
   subAbasContainer: {
     flexDirection: 'row',
     backgroundColor: '#0B132B',
     borderRadius: 8,
     padding: 4,
-    marginBottom: 16,
+    marginBottom: 16
   },
-  subAbaBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
-  subAbaBtnAtivo: { backgroundColor: '#2563EB' },
-  subAbaTexto: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
-  subAbaTextoAtivo: { color: '#FFFFFF' },
-  secaoHeader: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold', marginTop: 8, marginBottom: 10 },
-  subTituloInstrucao: { color: '#94A3B8', fontSize: 12, marginBottom: 12 },
-  timelineBox: { marginBottom: 16 },
+  subAbaBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6
+  },
+  subAbaBtnAtivo: {
+    backgroundColor: '#2563EB'
+  },
+  subAbaTexto: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  subAbaTextoAtivo: {
+    color: '#FFFFFF'
+  },
+  secaoHeader: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 8,
+    marginBottom: 10
+  },
+  subTituloInstrucao: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginBottom: 12
+  },
+  timelineBox: {
+    marginBottom: 16
+  },
   cardTimeline: {
     backgroundColor: '#1C2541',
     borderRadius: 8,
@@ -496,11 +533,40 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2A365C',
+    borderColor: '#2A365C'
   },
-  cardTitulo: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
-  cardHorario: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
-  cardAvisoTexto: { color: '#38BDF8', fontSize: 11, marginTop: 4, fontWeight: '600' },
-  badgeStatus: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  badgeStatusTexto: { color: '#000000', fontSize: 11, fontWeight: 'bold' },
-  
+  cardTimelineInfo: {
+    flex: 1
+  },
+  cardTitulo: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold'
+  },
+  cardHorario: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 4
+  },
+  cardAvisoTexto: {
+    color: '#38BDF8',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '600'
+  },
+  badgeStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6
+  },
+  badgeStatusTexto: {
+    color: '#000000',
+    fontSize: 11,
+    fontWeight: 'bold'
+  },
+  botoesAcaoRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16
+  },
+  btnAti
