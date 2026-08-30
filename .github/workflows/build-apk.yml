@@ -16,7 +16,7 @@ jobs:
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Configurar Java JDK 17
         uses: actions/setup-java@v4
@@ -28,7 +28,7 @@ jobs:
         run: npm install
 
       - name: Gerar Projeto Android Nativo (Expo Prebuild)
-        run: npx expo prebuild --platform android --no-install
+        run: npx expo prebuild --platform android --clean --no-install
 
       - name: Gerar APK de Debug
         run: |
