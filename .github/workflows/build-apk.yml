@@ -2,7 +2,13 @@ name: Build APK - Alertas Poke_membros
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -10,42 +16,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do Código
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 18
+          cache: 'npm'
 
-      - name: Configurar Java JDK 17
+      - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
-      - name: Instalar Dependências
-        run: npm install
+      - name: Setup EAS CLI
+        run: npm install -g eas-cli
 
-      - name: Gerar Projeto Android Nativo (Expo Prebuild)
-        run: npx expo prebuild --platform android --clean --no-install
-
-      - name: Criar Bundle JavaScript Offline
+      - name: Install dependencies (clean install)
         run: |
-          mkdir -p android/app/src/main/assets
-          npx expo export:embed --platform android --dev false --entry-file node_modules/expo/AppEntry.js --asset-catalog-dest android/app/src/main/res --bundle-output android/app/src/main/assets/index.android.bundle
+          npm cache clean --force
+          npm install --force
 
-      - name: Gerar APK de Debug
-        env:
-          JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+      - name: Build Android APK (Local EAS)
+        run: npx eas-cli build --platform android --profile preview --local
 
-      - name: Fazer Upload do APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Alertas-Poke_membros-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Alertas-PokeMembros-APK
+          path: '*.apk'
           
