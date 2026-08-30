@@ -25,11 +25,11 @@ jobs:
       - name: Build Web App
         run: npm run build
 
-      - name: Setup Java JDK
+      - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '11'
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Initialize Capacitor and Add Android
         run: |
@@ -38,10 +38,12 @@ jobs:
           npx cap sync android
 
       - name: Build Android APK
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false"
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --no-build-cache
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
