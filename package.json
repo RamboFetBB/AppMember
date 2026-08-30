@@ -1,7 +1,7 @@
 {
   "name": "app-member",
   "version": "1.0.0",
-  "main": "App.jsx",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -17,9 +17,9 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
-    "@babel/plugin-transform-flow-strip-types": "^7.22.5",
-    "@babel/preset-react": "^7.22.15",
-    "babel-preset-expo": "~11.0.0"
+    "@types/react": "~18.2.45",
+    "babel-preset-expo": "~11.0.0",
+    "typescript": "^5.3.3"
   },
   "private": true
 }
