@@ -160,7 +160,6 @@ export default function App() {
         var partes = ev.inicio.split(':');
         var iniMin = parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
         
-        // Notifica 5m antes do evento
         var alvoMin = iniMin - 5; 
         var diffSegundos = (alvoMin - minutosAtuais) * 60 - segundosAtuais;
 
@@ -267,7 +266,6 @@ export default function App() {
     return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
   }
 
-  // Estilos de status solicitados
   function getStatusEvento(ev: any) {
     var diaAtual = agora.getDay();
     if (ev.dias && ev.dias.indexOf(diaAtual) === -1) {
@@ -308,6 +306,206 @@ export default function App() {
     var m = String(dateObj.getMinutes()).padStart(2, '0');
     var s = String(dateObj.getSeconds()).padStart(2, '0');
     return h + ':' + m + ':' + s;
+  }
+
+  function renderSubAbaContent() {
+    if (subAba === 'fixos') {
+      return (
+        <View>
+          <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diarios:</Text>
+          <View style={styles.timelineBox}>
+            {eventos.map(function (ev) {
+              var infoStatus = getStatusEvento(ev);
+              
+              var badgeStyle = styles.badgePendente;
+              var badgeTextStyle = styles.badgeTextoPendente;
+
+              if (infoStatus.tipoEstilo === 'concluido') {
+                badgeStyle = styles.badgeConcluido;
+                badgeTextStyle = styles.badgeTextoConcluido;
+              } else if (infoStatus.tipoEstilo === 'emAndamento') {
+                badgeStyle = styles.badgeEmAndamento;
+                badgeTextStyle = styles.badgeTextoEmAndamento;
+              } else if (infoStatus.tipoEstilo === 'desativado') {
+                badgeStyle = styles.badgeDesativado;
+                badgeTextStyle = styles.badgeTextoDesativado;
+              }
+
+              return (
+                <View key={ev.id} style={styles.cardTimeline}>
+                  <View style={styles.cardTimelineInfo}>
+                    <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                    <Text style={styles.cardHorario}>
+                      ⏰ {ev.tipo === 'duracao' ? ev.inicio + ' - ' + ev.fim : ev.inicio}
+                    </Text>
+                    {ev.aviso ? (
+                      <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
+                    ) : null}
+                  </View>
+                  <View style={badgeStyle}>
+                    <Text style={badgeTextStyle}>{infoStatus.status}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
+          <Text style={styles.secaoHeader}>⚡ Notificacoes Automaticas (5m antes):</Text>
+          <View style={styles.botoesAcaoRow}>
+            <TouchableOpacity
+              style={styles.btnAtivarTodas}
+              onPress={function () {
+                var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: true }); });
+                setEventos(novas);
+                agendarEventosAtivos(novas);
+              }}
+            >
+              <Text style={styles.btnAcaoTexto}>🔔 Ativar Todas</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnDesativarTodas}
+              onPress={function () {
+                var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: false }); });
+                setEventos(novas);
+                Notifications.cancelAllScheduledNotificationsAsync();
+              }}
+            >
+              <Text style={styles.btnAcaoTexto}>🔕 Desativar Todas</Text>
+            </TouchableOpacity>
+          </View>
+
+          {eventos.map(function (ev) {
+            return (
+              <View key={ev.id} style={styles.cardToggle}>
+                <View style={styles.cardTimelineInfo}>
+                  <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                  <Text style={styles.cardSub}>
+                    Horario: {ev.tipo === 'duracao' ? ev.inicio + ' as ' + ev.fim : ev.inicio}
+                  </Text>
+                  <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
+                </View>
+                <Switch
+                  value={ev.ativo}
+                  onValueChange={function () {
+                    var novas = eventos.map(function (e) {
+                      return e.id === ev.id ? Object.assign({}, e, { ativo: !e.ativo }) : e;
+                    });
+                    setEventos(novas);
+                    agendarEventosAtivos(novas);
+                  }}
+                  trackColor={{ false: '#334155', true: '#059669' }}
+                  thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
+                />
+              </View>
+            );
+          })}
+        </View>
+      );
+    }
+
+    if (subAba === 'sistema') {
+      return (
+        <View>
+          <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
+          <Text style={styles.subTituloInstrucao}>
+            Slots final 1 possuem o controle adicional de 24h.
+          </Text>
+
+          {DIAS_SLOTS.map(function (slot) {
+            var ehFinal1 = slot.indexOf('1', slot.length - 1) !== -1;
+            var info1h = cooldowns[slot + '_1h'] || { ativo: false, tempoRestante: 0 };
+            var info24h = cooldowns[slot + '_24h'] || { ativo: false, tempoRestante: 0 };
+
+            return (
+              <View key={slot} style={styles.cardSystemSlot}>
+                <Text style={styles.cardTitulo}>Slot {slot}</Text>
+
+                <View style={styles.rowSystemControl}>
+                  <View style={styles.cardTimelineInfo}>
+                    <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
+                    <Text style={info1h.ativo ? styles.cardTimerAtivo : styles.cardSub}>
+                      {info1h.ativo ? '⏳ ' + formatarTempo(info1h.tempoRestante) : 'Inativo'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={Boolean(info1h.ativo)}
+                    onValueChange={function () { alternarCooldown1h(slot); }}
+                    trackColor={{ false: '#334155', true: '#2563EB' }}
+                    thumbColor={info1h.ativo ? '#3B82F6' : '#94A3B8'}
+                  />
+                </View>
+
+                {ehFinal1 ? (
+                  <View style={styles.rowSystemControlDivider}>
+                    <View style={styles.cardTimelineInfo}>
+                      <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
+                      <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
+                        {info24h.ativo ? '⌛ ' + formatarTempo(info24h.tempoRestante) : 'Inativo'}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={Boolean(info24h.ativo)}
+                      onValueChange={function () { alternarCooldown24h(slot); }}
+                      trackColor={{ false: '#334155', true: '#D97706' }}
+                      thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
+                    />
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      );
+    }
+
+    if (subAba === 'custom') {
+      return (
+        <View>
+          <Text style={styles.secaoHeader}>🛠️ Criar Alerta Customizado:</Text>
+
+          <View style={styles.formCustomBox}>
+            <TextInput
+              style={styles.inputCustom}
+              placeholder="Nome do Evento (ex: Guerra de Castelo)"
+              placeholderTextColor="#64748B"
+              value={novoNome}
+              onChangeText={setNovoNome}
+            />
+            <TextInput
+              style={styles.inputCustom}
+              placeholder="Horario (ex: 20:30)"
+              placeholderTextColor="#64748B"
+              value={novoHorario}
+              onChangeText={setNovoHorario}
+            />
+            <TouchableOpacity style={styles.btnAdicionarCustom} onPress={adicionarEventoCustom}>
+              <Text style={styles.btnAcaoTexto}>➕ Adicionar Alerta</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.secaoHeader}>📋 Seus Eventos Customizados:</Text>
+          {eventosCustom.length === 0 ? (
+            <Text style={styles.abaVaziaTexto}>Nenhum evento customizado adicionado.</Text>
+          ) : (
+            eventosCustom.map(function (ev) {
+              return (
+                <View key={ev.id} style={styles.cardToggle}>
+                  <View style={styles.cardTimelineInfo}>
+                    <Text style={styles.cardTitulo}>{ev.nome}</Text>
+                    <Text style={styles.cardSub}>Horario: {ev.horario}</Text>
+                  </View>
+                  <TouchableOpacity onPress={function () { removerEventoCustom(ev.id); }} style={styles.btnDeletar}>
+                    <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })
+          )}
+        </View>
+      );
+    }
+
+    return null;
   }
 
   return (
@@ -353,173 +551,4 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {subAba === 'fixos' ? (
-              <View>
-                <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diarios:</Text>
-                <View style={styles.timelineBox}>
-                  {eventos.map(function (ev) {
-                    var infoStatus = getStatusEvento(ev);
-                    
-                    var badgeStyle = styles.badgePendente;
-                    var badgeTextStyle = styles.badgeTextoPendente;
-
-                    if (infoStatus.tipoEstilo === 'concluido') {
-                      badgeStyle = styles.badgeConcluido;
-                      badgeTextStyle = styles.badgeTextoConcluido;
-                    } else if (infoStatus.tipoEstilo === 'emAndamento') {
-                      badgeStyle = styles.badgeEmAndamento;
-                      badgeTextStyle = styles.badgeTextoEmAndamento;
-                    } else if (infoStatus.tipoEstilo === 'desativado') {
-                      badgeStyle = styles.badgeDesativado;
-                      badgeTextStyle = styles.badgeTextoDesativado;
-                    }
-
-                    return (
-                      <View key={ev.id} style={styles.cardTimeline}>
-                        <View style={styles.cardTimelineInfo}>
-                          <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                          <Text style={styles.cardHorario}>
-                            ⏰ {ev.tipo === 'duracao' ? ev.inicio + ' - ' + ev.fim : ev.inicio}
-                          </Text>
-                          {ev.aviso ? (
-                            <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
-                          ) : null}
-                        </View>
-                        <View style={badgeStyle}>
-                          <Text style={badgeTextStyle}>{infoStatus.status}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.secaoHeader}>⚡ Notificacoes Automaticas (5m antes):</Text>
-                <View style={styles.botoesAcaoRow}>
-                  <TouchableOpacity
-                    style={styles.btnAtivarTodas}
-                    onPress={function () {
-                      var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: true }); });
-                      setEventos(novas);
-                      agendarEventosAtivos(novas);
-                    }}
-                  >
-                    <Text style={styles.btnAcaoTexto}>🔔 Ativar Todas</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.btnDesativarTodas}
-                    onPress={function () {
-                      var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: false }); });
-                      setEventos(novas);
-                      Notifications.cancelAllScheduledNotificationsAsync();
-                    }}
-                  >
-                    <Text style={styles.btnAcaoTexto}>🔕 Desativar Todas</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {eventos.map(function (ev) {
-                  return (
-                    <View key={ev.id} style={styles.cardToggle}>
-                      <View style={styles.cardTimelineInfo}>
-                        <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                        <Text style={styles.cardSub}>
-                          Horario: {ev.tipo === 'duracao' ? ev.inicio + ' as ' + ev.fim : ev.inicio}
-                        </Text>
-                        <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
-                      </View>
-                      <Switch
-                        value={ev.ativo}
-                        onValueChange={function () {
-                          var novas = eventos.map(function (e) {
-                            return e.id === ev.id ? Object.assign({}, e, { ativo: !e.ativo }) : e;
-                          });
-                          setEventos(novas);
-                          agendarEventosAtivos(novas);
-                        }}
-                        trackColor={{ false: '#334155', true: '#059669' }}
-                        thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
-                      />
-                    </View>
-                  );
-                })}
-              </View>
-            ) : null}
-
-            {subAba === 'sistema' ? (
-              <View>
-                <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
-                <Text style={styles.subTituloInstrucao}>
-                  Slots final 1 possuem o controle adicional de 24h.
-                </Text>
-
-                {DIAS_SLOTS.map(function (slot) {
-                  var ehFinal1 = slot.indexOf('1', slot.length - 1) !== -1;
-                  var info1h = cooldowns[slot + '_1h'] || { ativo: false, tempoRestante: 0 };
-                  var info24h = cooldowns[slot + '_24h'] || { ativo: false, tempoRestante: 0 };
-
-                  return (
-                    <View key={slot} style={styles.cardSystemSlot}>
-                      <Text style={styles.cardTitulo}>Slot {slot}</Text>
-
-                      <View style={styles.rowSystemControl}>
-                        <View style={styles.cardTimelineInfo}>
-                          <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
-                          <Text style={info1h.ativo ? styles.cardTimerAtivo : styles.cardSub}>
-                            {info1h.ativo ? '⏳ ' + formatarTempo(info1h.tempoRestante) : 'Inativo'}
-                          </Text>
-                        </View>
-                        <Switch
-                          value={Boolean(info1h.ativo)}
-                          onValueChange={function () { alternarCooldown1h(slot); }}
-                          trackColor={{ false: '#334155', true: '#2563EB' }}
-                          thumbColor={info1h.ativo ? '#3B82F6' : '#94A3B8'}
-                        />
-                      </View>
-
-                      {ehFinal1 ? (
-                        <View style={styles.rowSystemControlDivider}>
-                          <View style={styles.cardTimelineInfo}>
-                            <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
-                            <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
-                              {info24h.ativo ? '⌛ ' + formatarTempo(info24h.tempoRestante) : 'Inativo'}
-                            </Text>
-                          </View>
-                          <Switch
-                            value={Boolean(info24h.ativo)}
-                            onValueChange={function () { alternarCooldown24h(slot); }}
-                            trackColor={{ false: '#334155', true: '#D97706' }}
-                            thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
-                          />
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </View>
-            ) : null}
-
-            {subAba === 'custom' ? (
-              <View>
-                <Text style={styles.secaoHeader}>🛠️ Criar Alerta Customizado:</Text>
-
-                <View style={styles.formCustomBox}>
-                  <TextInput
-                    style={styles.inputCustom}
-                    placeholder="Nome do Evento (ex: Guerra de Castelo)"
-                    placeholderTextColor="#64748B"
-                    value={novoNome}
-                    onChangeText={setNovoNome}
-                  />
-                  <TextInput
-                    style={styles.inputCustom}
-                    placeholder="Horario (ex: 20:30)"
-                    placeholderTextColor="#64748B"
-                    value={novoHorario}
-                    onChangeText={setNovoHorario}
-                  />
-                  <TouchableOpacity style={styles.btnAdicionarCustom} onPress={adicionarEventoCustom}>
-                    <Text style={styles.btnAcaoTexto}>➕ Adicionar Alerta</Text>
-                  </TouchableOpacity>
-                </View>
-
-                
+          
