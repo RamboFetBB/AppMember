@@ -30,6 +30,11 @@ jobs:
       - name: Gerar Projeto Android Nativo (Expo Prebuild)
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: Criar Bundle JavaScript Offline
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle --platform android --dev false --entry-file node_modules/expo/AppEntry.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+
       - name: Gerar APK de Debug
         env:
           JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
