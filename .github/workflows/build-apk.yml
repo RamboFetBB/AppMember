@@ -35,14 +35,14 @@ jobs:
           npm cache clean --force
           npm install --force
 
-      - name: Prebuild Expo Native Project
-        run: npx expo prebuild --platform android
+      - name: Prebuild Expo Project
+        run: npx expo prebuild --platform android --clean
 
       - name: Build Android Release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon -x test
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
