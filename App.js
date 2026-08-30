@@ -7,10 +7,12 @@ import {
   ScrollView,
   Switch,
   SafeAreaView,
-  StatusBar
+  StatusBar,
+  Alert
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
+// Configura o handler para exibir alerta sonoro e visual mesmo com o app aberto
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -27,38 +29,134 @@ const EVENTOS_FIXOS_INICIAIS = [
   { id: '5', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true },
 ];
 
+const DIAS_SLOTS = [
+  'Seg1', 'Seg2', 'Ter1', 'Ter2', 'Qua1', 'Qua2',
+  'Qui1', 'Qui2', 'Sex1', 'Sex2', 'Sab1', 'Sab2', 'Dom1', 'Dom2'
+];
+
+const COOLDOWN_TEMPO = 61 * 60; // 1 hora e 1 minuto (3660 segundos)
+
 export default function App() {
   const [abaInferior, setAbaInferior] = useState('gerador');
   const [subAba, setSubAba] = useState('fixos');
   const [eventos, setEventos] = useState(EVENTOS_FIXOS_INICIAIS);
   const [agora, setAgora] = useState(new Date());
 
-  // Relógio em tempo real para atualizar status e contagem regressiva a cada segundo
+  // Estado dos temporizadores de cooldown (Sistema)
+  // Estrutura: { Seg1: { ativo: boolean, fimTimestamp: number, tempoRestante: number, notifId: string } }
+  const [cooldowns, setCooldowns] = useState({});
+
   useEffect(() => {
-    const timer = setInterval(() => setAgora(new Date()), 1000);
+    configurarNotificacoes();
+    const timer = setInterval(() => {
+      setAgora(new Date());
+      atualizarTemporizadores();
+    }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [cooldowns]);
 
-  useEffect(() => {
-    solicitarPermissoes();
-  }, []);
-
-  async function solicitarPermissoes() {
-    await Notifications.requestPermissionsAsync();
+  async function configurarNotificacoes() {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      await Notifications.requestPermissionsAsync();
+    }
   }
 
-  // Auxiliar: Minutos desde 00:00
+  // Agendar Notificação no Sistema Operacional
+  async function agendarNotificacao(titulo, corpo, segundos) {
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: titulo,
+          body: corpo,
+          sound: true,
+        },
+        trigger: {
+          seconds: segundos,
+        },
+      });
+      return id;
+    } catch (e) {
+      console.warn("Erro ao agendar notificação:", e);
+      return null;
+    }
+  }
+
+  // Cancelar Notificação Agendada
+  async function cancelarNotificacao(id) {
+    if (id) {
+      await Notifications.cancelScheduledNotificationAsync(id);
+    }
+  }
+
+  // Atualizar a contagem dos temporizadores em tempo real
+  function atualizarTemporizadores() {
+    const agoraMs = Date.now();
+    let mudou = false;
+    const novosCooldowns = { ...cooldowns };
+
+    Object.keys(novosCooldowns).forEach(slot => {
+      const item = novosCooldowns[slot];
+      if (item && item.ativo) {
+        const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
+        if (restante !== item.tempoRestante) {
+          mudou = true;
+          novosCooldowns[slot].tempoRestante = restante;
+          if (restante === 0) {
+            novosCooldowns[slot].ativo = false;
+          }
+        }
+      }
+    });
+
+    if (mudou) {
+      setCooldowns(novosCooldowns);
+    }
+  }
+
+  // Ativar ou desativar o temporizador de 1h 01m de um Slot específico
+  async function alternarCooldownSlot(slot) {
+    const estadoAtual = cooldowns[slot];
+
+    if (estadoAtual && estadoAtual.ativo) {
+      // Cancelar
+      await cancelarNotificacao(estadoAtual.notifId);
+      setCooldowns(prev => ({
+        ...prev,
+        [slot]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
+      }));
+    } else {
+      // Ativar temporizador de 1h 01m
+      const fimTimestamp = Date.now() + COOLDOWN_TEMPO * 1000;
+      const notifId = await agendarNotificacao(
+        "Guilda - Cooldown Concluído!",
+        "Você já pode se juntar a próxima guilda",
+        COOLDOWN_TEMPO
+      );
+
+      setCooldowns(prev => ({
+        ...prev,
+        [slot]: {
+          ativo: true,
+          fimTimestamp,
+          tempoRestante: COOLDOWN_TEMPO,
+          notifId
+        }
+      }));
+    }
+  }
+
+  // Auxiliares da Timeline
   function getMinutos(horarioStr) {
     const [h, m] = horarioStr.split(':').map(Number);
     return h * 60 + m;
   }
 
-  // Lógica de cálculo do estado do evento
   function getStatusEvento(inicioStr, fimStr, tipo) {
     const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
     const segundosAtuais = agora.getSeconds();
     const iniMin = getMinutos(inicioStr);
-    const fimMin = tipo === 'duracao' ? getMinutos(fimStr) : iniMin + 5; // Ponto dura 5min de exibição
+    const fimMin = tipo === 'duracao' ? getMinutos(fimStr) : iniMin + 5;
 
     if (minutosAtuais >= iniMin && minutosAtuais < fimMin) {
       return { status: 'EM ANDAMENTO', cor: '#10B981' };
@@ -68,7 +166,6 @@ export default function App() {
       return { status: 'CONCLUÍDO', cor: '#64748B' };
     }
 
-    // Calcular tempo restante exato para o início
     const diffMinutos = iniMin - minutosAtuais - 1;
     const diffSegundos = 60 - segundosAtuais;
     const horasRestantes = Math.floor(diffMinutos / 60);
@@ -84,21 +181,31 @@ export default function App() {
     return { status: `Próximo ${textoTempo}`, cor: '#EAB308' };
   }
 
-  // Toggles globais
-  function alternarTodos(ativo) {
+  // Toggles de notificações fixas
+  async function alternarTodosFixos(ativo) {
     setEventos(prev => prev.map(ev => ({ ...ev, ativo })));
+    if (ativo) {
+      Alert.alert("Notificações", "Alertas para eventos fixos ativados.");
+    }
   }
 
-  // Toggle individual
-  function alternarEvento(id) {
+  function alternarEventoFixo(id) {
     setEventos(prev => prev.map(ev => ev.id === id ? { ...ev, ativo: !ev.ativo } : ev));
+  }
+
+  // Formatação em HH:MM:SS para o cooldown
+  function formatarTempo(segundos) {
+    const h = Math.floor(segundos / 3600);
+    const m = Math.floor((segundos % 3600) / 60);
+    const s = segundos % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
 
-      {/* Header Superior */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerEmoji}>🛡️</Text>
@@ -112,11 +219,9 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {abaInferior === 'gerador' ? (
           <View style={styles.painelContainer}>
-            
-            {/* Título do Painel */}
             <Text style={styles.painelTitulo}>🔔 Painel de Notificações</Text>
 
-            {/* Sub-Abas superiores */}
+            {/* Sub-Abas */}
             <View style={styles.subAbasContainer}>
               <TouchableOpacity
                 style={[styles.subAbaBtn, subAba === 'fixos' && styles.subAbaBtnAtivo]}
@@ -140,9 +245,9 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {subAba === 'fixos' ? (
+            {/* ABA 1: EVENTOS FIXOS */}
+            {subAba === 'fixos' && (
               <>
-                {/* Timeline de Eventos */}
                 <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
                 <View style={styles.timelineBox}>
                   {eventos.map(ev => {
@@ -163,18 +268,16 @@ export default function App() {
                   })}
                 </View>
 
-                {/* Ações de Notificação */}
                 <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m antes):</Text>
                 <View style={styles.botoesAcaoRow}>
-                  <TouchableOpacity style={styles.btnAtivarTodas} onPress={() => alternarTodos(true)}>
+                  <TouchableOpacity style={styles.btnAtivarTodas} onPress={() => alternarTodosFixos(true)}>
                     <Text style={styles.btnAcaoTexto}>🔔 Ativar Todas</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.btnDesativarTodas} onPress={() => alternarTodos(false)}>
+                  <TouchableOpacity style={styles.btnDesativarTodas} onPress={() => alternarTodosFixos(false)}>
                     <Text style={styles.btnAcaoTexto}>🔕 Desativar Todas</Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* Lista de Toggles Individuais */}
                 {eventos.map(ev => (
                   <View key={ev.id} style={styles.cardToggle}>
                     <View style={{ flex: 1 }}>
@@ -186,16 +289,52 @@ export default function App() {
                     </View>
                     <Switch
                       value={ev.ativo}
-                      onValueChange={() => alternarEvento(ev.id)}
+                      onValueChange={() => alternarEventoFixo(ev.id)}
                       trackColor={{ false: '#334155', true: '#059669' }}
                       thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
                     />
                   </View>
                 ))}
               </>
-            ) : (
+            )}
+
+            {/* ABA 2: SISTEMA (SLOTS SEG1 A DOM2 + COOLDOWN 1H01M) */}
+            {subAba === 'sistema' && (
+              <View>
+                <Text style={styles.secaoHeader}>⏳ Cooldown de Troca de Guilda (1h 01m):</Text>
+                <Text style={styles.subTituloInstrucao}>
+                  Ative o botão ao sair de uma guilda para iniciar a contagem. O app emitirá a notificação "Você já pode se juntar a próxima guilda".
+                </Text>
+
+                {DIAS_SLOTS.map(slot => {
+                  const infoSlot = cooldowns[slot] || { ativo: false, tempoRestante: 0 };
+                  return (
+                    <View key={slot} style={styles.cardToggle}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cardTitulo}>Slot {slot}</Text>
+                        <Text style={infoSlot.ativo ? styles.cardTimerAtivo : styles.cardSub}>
+                          {infoSlot.ativo
+                            ? `⏳ Restante: ${formatarTempo(infoSlot.tempoRestante)}`
+                            : 'Pronto para iniciar contagem'}
+                        </Text>
+                      </View>
+                      <Switch
+                        value={!!infoSlot.ativo}
+                        onValueChange={() => alternarCooldownSlot(slot)}
+                        trackColor={{ false: '#334155', true: '#2563EB' }}
+                        thumbColor={infoSlot.ativo ? '#3B82F6' : '#94A3B8'}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* ABA 3: CUSTOMIZÁVEL */}
+            {subAba === 'custom' && (
               <View style={styles.abaVaziaContainer}>
-                <Text style={styles.abaVaziaTexto}>Configurações de {subAba}</Text>
+                <Text style={styles.secaoHeader}>🛠️ Notificações Customizadas</Text>
+                <Text style={styles.abaVaziaTexto}>Adicione e programe lembretes personalizados para a sua guilda.</Text>
               </View>
             )}
 
@@ -207,7 +346,7 @@ export default function App() {
         )}
       </ScrollView>
 
-      {/* Navegação Inferior de 5 Ícones */}
+      {/* Navegação Inferior */}
       <View style={styles.navBottom}>
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('gerador')}>
           <Text style={styles.navIcon}>⚡</Text>
@@ -277,7 +416,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 14,
-    paddingBottom: 70,
+    paddingBottom: 80,
   },
   painelContainer: {
     backgroundColor: '#111C38',
@@ -322,6 +461,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 8,
     marginBottom: 10,
+  },
+  subTituloInstrucao: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginBottom: 12,
   },
   timelineBox: {
     marginBottom: 16,
@@ -397,18 +541,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  cardTimerAtivo: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
   cardNotiInfo: {
     color: '#10B981',
     fontSize: 11,
     marginTop: 4,
   },
   abaVaziaContainer: {
-    padding: 40,
+    padding: 30,
     alignItems: 'center',
   },
   abaVaziaTexto: {
     color: '#94A3B8',
-    fontSize: 14,
+    fontSize: 13,
+    textAlign: 'center',
   },
   navBottom: {
     flexDirection: 'row',
@@ -419,7 +570,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B132B',
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   navItem: {
     flex: 1,
@@ -438,4 +589,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-                  
