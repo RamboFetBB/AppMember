@@ -33,7 +33,7 @@ jobs:
       - name: Criar Bundle JavaScript Offline
         run: |
           mkdir -p android/app/src/main/assets
-          npx expo export:embed --platform android --dev false --asset-catalog-dest android/app/src/main/res --bundle-output android/app/src/main/assets/index.android.bundle
+          npx expo export:embed --platform android --dev false --entry-file node_modules/expo/AppEntry.js --asset-catalog-dest android/app/src/main/res --bundle-output android/app/src/main/assets/index.android.bundle
 
       - name: Gerar APK de Debug
         env:
