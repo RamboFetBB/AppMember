@@ -9,7 +9,8 @@ import {
   TextInput,
   SafeAreaView,
   StatusBar,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
@@ -114,17 +115,63 @@ export default function App() {
     if (perm.status !== 'granted') {
       await Notifications.requestPermissionsAsync();
     }
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Alertas Fixos',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+    }
   }
 
   async function agendarNotificacao(titulo: string, corpo: string, segundos: number) {
+    if (segundos <= 0) return null;
     try {
       return await Notifications.scheduleNotificationAsync({
-        content: { title: titulo, body: corpo, sound: true },
+        content: {
+          title: titulo,
+          body: corpo,
+          sound: true,
+          sticky: true,
+          autoDismiss: false,
+          data: { autoDismiss: false },
+        },
         trigger: { seconds: segundos }
       });
     } catch (e) {
       console.warn('Erro ao agendar notificacao:', e);
       return null;
+    }
+  }
+
+  async function agendarEventosAtivos(listaEventos: any[]) {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
+    var diaAtual = agora.getDay();
+    var minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
+    var segundosAtuais = agora.getSeconds();
+
+    for (var i = 0; i < listaEventos.length; i++) {
+      var ev = listaEventos[i];
+      if (ev.ativo && ev.dias && ev.dias.indexOf(diaAtual) !== -1) {
+        var partes = ev.inicio.split(':');
+        var iniMin = parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
+        
+        // Notifica 5m antes do evento
+        var alvoMin = iniMin - 5; 
+        var diffSegundos = (alvoMin - minutosAtuais) * 60 - segundosAtuais;
+
+        if (diffSegundos > 0) {
+          await agendarNotificacao(
+            'Kira Alertas - ' + ev.nome,
+            ev.aviso ? ev.aviso : 'O evento ' + ev.nome + ' comeca em 5 minutos!',
+            diffSegundos
+          );
+        }
+      }
     }
   }
 
@@ -220,10 +267,11 @@ export default function App() {
     return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
   }
 
+  // Estilos de status solicitados
   function getStatusEvento(ev: any) {
     var diaAtual = agora.getDay();
     if (ev.dias && ev.dias.indexOf(diaAtual) === -1) {
-      return { status: 'HOJE NAO', cor: '#475569' };
+      return { status: 'HOJE NAO', tipoEstilo: 'desativado' };
     }
 
     var minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
@@ -232,11 +280,11 @@ export default function App() {
     var fimMin = ev.tipo === 'duracao' ? getMinutos(ev.fim) : iniMin + 5;
 
     if (minutosAtuais >= iniMin && minutosAtuais < fimMin) {
-      return { status: 'EM ANDAMENTO', cor: '#10B981' };
+      return { status: 'Em andamento', tipoEstilo: 'emAndamento' };
     }
 
     if (minutosAtuais >= fimMin) {
-      return { status: 'CONCLUIDO', cor: '#64748B' };
+      return { status: 'Concluido hoje', tipoEstilo: 'concluido' };
     }
 
     var diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
@@ -245,7 +293,7 @@ export default function App() {
     var s = diffMinutosTotal % 60;
 
     var textoTempo = h > 0 ? h + 'h ' + m + 'm ' + s + 's' : m + 'm ' + s + 's';
-    return { status: 'Proximo (em ' + textoTempo + ')', cor: '#EAB308' };
+    return { status: 'Falta ' + textoTempo, tipoEstilo: 'pendente' };
   }
 
   function formatarTempo(segundos: number) {
@@ -253,6 +301,13 @@ export default function App() {
     var m = Math.floor((segundos % 3600) / 60);
     var s = segundos % 60;
     return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function formatarRelogioDigital(dateObj: Date) {
+    var h = String(dateObj.getHours()).padStart(2, '0');
+    var m = String(dateObj.getMinutes()).padStart(2, '0');
+    var s = String(dateObj.getSeconds()).padStart(2, '0');
+    return h + ':' + m + ':' + s;
   }
 
   return (
@@ -263,6 +318,10 @@ export default function App() {
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerEmoji}>🛡️</Text>
           <Text style={styles.headerTitle}>Kira Alertas Sistema</Text>
+        </View>
+        <View style={styles.clockBox}>
+          <Text style={styles.clockIcon}>🕒</Text>
+          <Text style={styles.clockText}>{formatarRelogioDigital(agora)}</Text>
         </View>
       </View>
 
@@ -300,6 +359,21 @@ export default function App() {
                 <View style={styles.timelineBox}>
                   {eventos.map(function (ev) {
                     var infoStatus = getStatusEvento(ev);
+                    
+                    var badgeStyle = styles.badgePendente;
+                    var badgeTextStyle = styles.badgeTextoPendente;
+
+                    if (infoStatus.tipoEstilo === 'concluido') {
+                      badgeStyle = styles.badgeConcluido;
+                      badgeTextStyle = styles.badgeTextoConcluido;
+                    } else if (infoStatus.tipoEstilo === 'emAndamento') {
+                      badgeStyle = styles.badgeEmAndamento;
+                      badgeTextStyle = styles.badgeTextoEmAndamento;
+                    } else if (infoStatus.tipoEstilo === 'desativado') {
+                      badgeStyle = styles.badgeDesativado;
+                      badgeTextStyle = styles.badgeTextoDesativado;
+                    }
+
                     return (
                       <View key={ev.id} style={styles.cardTimeline}>
                         <View style={styles.cardTimelineInfo}>
@@ -311,8 +385,8 @@ export default function App() {
                             <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
                           ) : null}
                         </View>
-                        <View style={[styles.badgeStatus, { backgroundColor: infoStatus.cor }]}>
-                          <Text style={styles.badgeStatusTexto}>{infoStatus.status}</Text>
+                        <View style={badgeStyle}>
+                          <Text style={badgeTextStyle}>{infoStatus.status}</Text>
                         </View>
                       </View>
                     );
@@ -324,9 +398,9 @@ export default function App() {
                   <TouchableOpacity
                     style={styles.btnAtivarTodas}
                     onPress={function () {
-                      setEventos(function (prev) {
-                        return prev.map(function (e) { return Object.assign({}, e, { ativo: true }); });
-                      });
+                      var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: true }); });
+                      setEventos(novas);
+                      agendarEventosAtivos(novas);
                     }}
                   >
                     <Text style={styles.btnAcaoTexto}>🔔 Ativar Todas</Text>
@@ -334,9 +408,9 @@ export default function App() {
                   <TouchableOpacity
                     style={styles.btnDesativarTodas}
                     onPress={function () {
-                      setEventos(function (prev) {
-                        return prev.map(function (e) { return Object.assign({}, e, { ativo: false }); });
-                      });
+                      var novas = eventos.map(function (e) { return Object.assign({}, e, { ativo: false }); });
+                      setEventos(novas);
+                      Notifications.cancelAllScheduledNotificationsAsync();
                     }}
                   >
                     <Text style={styles.btnAcaoTexto}>🔕 Desativar Todas</Text>
@@ -356,11 +430,11 @@ export default function App() {
                       <Switch
                         value={ev.ativo}
                         onValueChange={function () {
-                          setEventos(function (prev) {
-                            return prev.map(function (e) {
-                              return e.id === ev.id ? Object.assign({}, e, { ativo: !e.ativo }) : e;
-                            });
+                          var novas = eventos.map(function (e) {
+                            return e.id === ev.id ? Object.assign({}, e, { ativo: !e.ativo }) : e;
                           });
+                          setEventos(novas);
+                          agendarEventosAtivos(novas);
                         }}
                         trackColor={{ false: '#334155', true: '#059669' }}
                         thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
@@ -448,336 +522,4 @@ export default function App() {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.secaoHeader}>📋 Seus Eventos Customizados:</Text>
-                {eventosCustom.length === 0 ? (
-                  <Text style={styles.abaVaziaTexto}>Nenhum evento customizado adicionado.</Text>
-                ) : (
-                  eventosCustom.map(function (ev) {
-                    return (
-                      <View key={ev.id} style={styles.cardToggle}>
-                        <View style={styles.cardTimelineInfo}>
-                          <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                          <Text style={styles.cardSub}>Horario: {ev.horario}</Text>
-                        </View>
-                        <TouchableOpacity onPress={function () { removerEventoCustom(ev.id); }} style={styles.btnDeletar}>
-                          <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })
-                )}
-              </View>
-            ) : null}
-
-          </View>
-        ) : (
-          <View style={styles.abaVaziaContainer}>
-            <Text style={styles.abaVaziaTexto}>Tela: {abaInferior.toUpperCase()}</Text>
-          </View>
-        )}
-      </ScrollView>
-
-      <View style={styles.navBottom}>
-        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('gerador'); }}>
-          <Text style={styles.navIcon}>⚡</Text>
-          <Text style={[styles.navText, abaInferior === 'gerador' ? styles.navTextAtivo : null]}>Gerador</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('pessoas'); }}>
-          <Text style={styles.navIcon}>👥</Text>
-          <Text style={[styles.navText, abaInferior === 'pessoas' ? styles.navTextAtivo : null]}>Pessoas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('historico'); }}>
-          <Text style={styles.navIcon}>📜</Text>
-          <Text style={[styles.navText, abaInferior === 'historico' ? styles.navTextAtivo : null]}>Historico</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('guilda'); }}>
-          <Text style={styles.navIcon}>🏰</Text>
-          <Text style={[styles.navText, abaInferior === 'guilda' ? styles.navTextAtivo : null]}>Guilda</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={function () { setAbaInferior('dev'); }}>
-          <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={[styles.navText, abaInferior === 'dev' ? styles.navTextAtivo : null]}>Dev</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
-  );
-}
-
-var styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B132B'
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#1C2541'
-  },
-  headerTitleBox: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  headerEmoji: {
-    fontSize: 18,
-    marginRight: 8
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold'
-  },
-  scrollContent: {
-    padding: 14,
-    paddingBottom: 80
-  },
-  painelContainer: {
-    backgroundColor: '#111C38',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#1E293B'
-  },
-  painelTitulo: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12
-  },
-  subAbasContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#0B132B',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 16
-  },
-  subAbaBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 6
-  },
-  subAbaBtnAtivo: {
-    backgroundColor: '#2563EB'
-  },
-  subAbaTexto: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  subAbaTextoAtivo: {
-    color: '#FFFFFF'
-  },
-  secaoHeader: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginTop: 8,
-    marginBottom: 10
-  },
-  subTituloInstrucao: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginBottom: 12
-  },
-  timelineBox: {
-    marginBottom: 16
-  },
-  cardTimeline: {
-    backgroundColor: '#1C2541',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2A365C'
-  },
-  cardTimelineInfo: {
-    flex: 1
-  },
-  cardTitulo: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold'
-  },
-  cardHorario: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 4
-  },
-  cardAvisoTexto: {
-    color: '#38BDF8',
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '600'
-  },
-  badgeStatus: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6
-  },
-  badgeStatusTexto: {
-    color: '#000000',
-    fontSize: 11,
-    fontWeight: 'bold'
-  },
-  botoesAcaoRow: {
-    flexDirection: 'row',
-    marginBottom: 16
-  },
-  btnAtivarTodas: {
-    flex: 1,
-    backgroundColor: '#2563EB',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginRight: 5
-  },
-  btnDesativarTodas: {
-    flex: 1,
-    backgroundColor: '#334155',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginLeft: 5
-  },
-  btnAcaoTexto: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13
-  },
-  cardToggle: {
-    backgroundColor: '#1C2541',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2A365C'
-  },
-  cardSystemSlot: {
-    backgroundColor: '#1C2541',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#2A365C'
-  },
-  rowSystemControl: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6
-  },
-  rowSystemControlDivider: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#2A365C',
-    paddingTop: 8
-  },
-  cardSubLabel: {
-    color: '#94A3B8',
-    fontSize: 12
-  },
-  cardSub: {
-    color: '#64748B',
-    fontSize: 12,
-    marginTop: 2
-  },
-  cardTimerAtivo: {
-    color: '#38BDF8',
-    fontSize: 13,
-    fontWeight: 'bold',
-    marginTop: 2
-  },
-  cardTimerAtivo24: {
-    color: '#F59E0B',
-    fontSize: 13,
-    fontWeight: 'bold',
-    marginTop: 2
-  },
-  cardNotiInfo: {
-    color: '#10B981',
-    fontSize: 11,
-    marginTop: 4
-  },
-  formCustomBox: {
-    backgroundColor: '#1C2541',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16
-  },
-  inputCustom: {
-    backgroundColor: '#0B132B',
-    color: '#FFFFFF',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#334155'
-  },
-  btnAdicionarCustom: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 12,
-    borderRadius: 6,
-    alignItems: 'center'
-  },
-  btnDeletar: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6
-  },
-  btnDeletarTexto: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold'
-  },
-  abaVaziaContainer: {
-    padding: 30,
-    alignItems: 'center'
-  },
-  abaVaziaTexto: {
-    color: '#94A3B8',
-    fontSize: 13,
-    textAlign: 'center'
-  },
-  navBottom: {
-    flexDirection: 'row',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#0B132B',
-    borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    paddingVertical: 8
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center'
-  },
-  navIcon: {
-    fontSize: 16
-  },
-  navText: {
-    color: '#64748B',
-    fontSize: 10,
-    marginTop: 2
-  },
-  navTextAtivo: {
-    color: '#3B82F6',
-    fontWeight: 'bold'
-  }
-});
+                
