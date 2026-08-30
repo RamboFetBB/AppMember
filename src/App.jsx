@@ -1,92 +1,72 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 export default function App() {
-  const [permission, setPermission] = useState(
-    typeof Notification !== 'undefined' ? Notification.permission : 'default'
-  );
   const [logs, setLogs] = useState([]);
 
   const addLog = (msg) => {
     setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]);
   };
 
-  const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) {
-      alert('Este navegador ou WebView não suporta notificações.');
-      return;
-    }
-
+  // Solicita permissão nativa do Android
+  const pedirPermissao = async () => {
     try {
-      const res = await Notification.requestPermission();
-      setPermission(res);
-      if (res === 'granted') {
-        addLog('Permissão para notificações concedida!');
+      const perm = await LocalNotifications.requestPermissions();
+      if (perm.display === 'granted') {
+        addLog('Permissão NATIVA concedida!');
       } else {
-        addLog('Permissão negada.');
+        addLog('Permissão negada pelo usuário.');
       }
     } catch (err) {
-      addLog('Erro ao solicitar permissão: ' + err.message);
+      addLog('Erro de permissão: ' + err.message);
     }
   };
 
-  const sendTestNotification = () => {
-    if (permission !== 'granted') {
-      alert('Por favor, ative as notificações primeiro.');
-      return;
-    }
-
-    const title = '🛡️ Kira Evento Notificações';
-    const options = {
-      body: 'Esta é uma notificação de teste enviada pelo aplicativo!',
-      icon: 'https://via.placeholder.com/128/2563eb/ffffff?text=Kira',
-      vibrate: [200, 100, 200]
-    };
-
-    if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.showNotification(title, options);
+  // Dispara a notificação pelo próprio Android
+  const agendarNotificacao = async () => {
+    try {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            title: '🛡️ Kira Evento Notificações',
+            body: 'Seu evento de guilda vai começar em breve!',
+            id: new Date().getTime(),
+            schedule: { at: new Date(Date.now() + 1000 * 3) }, // Dispara em 3 segundos
+            sound: null,
+            actionTypeId: '',
+            extra: null
+          }
+        ]
       });
-    } else {
-      new Notification(title, options);
+      addLog('Notificação agendada! Aguarde 3 segundos...');
+    } catch (err) {
+      addLog('Erro ao enviar: ' + err.message);
     }
-
-    addLog('Notificação de teste enviada.');
   };
 
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <h1 style={styles.title}>🛡️ Kira Evento notificações</h1>
-        <p style={styles.subtitle}>Painel de Controle de Notificações</p>
+        <p style={styles.subtitle}>Notificações Nativa do App</p>
       </header>
 
       <main style={styles.card}>
-        <div style={styles.statusBox}>
-          <span>Status das Notificações:</span>
-          <strong style={{
-            color: permission === 'granted' ? '#22c55e' : permission === 'denied' ? '#ef4444' : '#f59e0b'
-          }}>
-            {permission.toUpperCase()}
-          </strong>
-        </div>
-
         <div style={styles.buttonGroup}>
-          {permission !== 'granted' && (
-            <button style={styles.btnPrimary} onClick={requestNotificationPermission}>
-              Ativar Notificações
-            </button>
-          )}
-
-          <button style={styles.btnSecondary} onClick={sendTestNotification}>
-            Testar Notificação
+          <button style={styles.btnPrimary} onClick={pedirPermissao}>
+            1. Ativar Permissão
+          </button>
+          
+          <button style={styles.btnSecondary} onClick={agendarNotificacao}>
+            2. Testar Notificação (3s)
           </button>
         </div>
 
         <div style={styles.logContainer}>
-          <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>Histórico de Eventos:</h3>
+          <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>Histórico:</h3>
           <div style={styles.logBox}>
             {logs.length === 0 ? (
-              <p style={{ opacity: 0.6, fontSize: '13px' }}>Nenhum evento registrado ainda.</p>
+              <p style={{ opacity: 0.6, fontSize: '13px' }}>Clique nos botões acima para testar.</p>
             ) : (
               logs.map((log, index) => (
                 <div key={index} style={styles.logItem}>{log}</div>
@@ -111,41 +91,17 @@ const styles = {
     padding: '20px',
     fontFamily: 'system-ui, -apple-system, sans-serif'
   },
-  header: {
-    textAlign: 'center',
-    marginBottom: '24px'
-  },
-  title: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    marginBottom: '8px'
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#94a3b8'
-  },
+  header: { textAlign: 'center', marginBottom: '24px' },
+  title: { fontSize: '22px', fontWeight: 'bold', marginBottom: '8px' },
+  subtitle: { fontSize: '14px', color: '#94a3b8' },
   card: {
     backgroundColor: '#1e293b',
     borderRadius: '12px',
     padding: '24px',
     maxWidth: '400px',
-    width: '100%',
-    boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+    width: '100%'
   },
-  statusBox: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '12px',
-    backgroundColor: '#334155',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    fontSize: '14px'
-  },
-  buttonGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
-  },
+  buttonGroup: { display: 'flex', flexDirection: 'column', gap: '12px' },
   btnPrimary: {
     backgroundColor: '#2563eb',
     color: '#fff',
@@ -156,7 +112,7 @@ const styles = {
     cursor: 'pointer'
   },
   btnSecondary: {
-    backgroundColor: '#475569',
+    backgroundColor: '#10b981',
     color: '#fff',
     border: 'none',
     padding: '12px',
@@ -164,9 +120,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer'
   },
-  logContainer: {
-    marginTop: '24px'
-  },
+  logContainer: { marginTop: '24px' },
   logBox: {
     backgroundColor: '#0f172a',
     borderRadius: '6px',
@@ -174,10 +128,5 @@ const styles = {
     maxHeight: '150px',
     overflowY: 'auto'
   },
-  logItem: {
-    fontSize: '12px',
-    color: '#cbd5e1',
-    marginBottom: '4px',
-    fontFamily: 'monospace'
-  }
+  logItem: { fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }
 };
