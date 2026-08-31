@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Updates from 'expo-updates';
 
 interface EventoFixo {
   id: string;
@@ -82,6 +83,7 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     configurarNotificacoes();
     carregarDados();
+    checarAtualizacoesOTA();
 
     const timer = setInterval(() => {
       const agoraAtual = new Date();
@@ -114,6 +116,26 @@ export default function App(): React.JSX.Element {
 
     return () => clearInterval(timer);
   }, []);
+
+  const checarAtualizacoesOTA = async () => {
+    if (__DEV__) return;
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        Alert.alert(
+          '🚀 Patch de Atualização!',
+          'Uma nova versão do app foi baixada. Deseja reiniciar para aplicar as mudanças agora?',
+          [
+            { text: 'Mais tarde', style: 'cancel' },
+            { text: 'Reiniciar Agora', onPress: () => Updates.reloadAsync() }
+          ]
+        );
+      }
+    } catch (e) {
+      console.log('Erro ao checar atualizações OTA:', e);
+    }
+  };
 
   const carregarDados = async () => {
     try {
@@ -641,6 +663,20 @@ export default function App(): React.JSX.Element {
           <View style={styles.painelContainer}>
             <Text style={styles.painelTitulo}>⚙️ Modos & Testes Dev</Text>
             
+            <View style={styles.cardSystemSlot}>
+              <Text style={styles.cardTitulo}>Atualizações Over-The-Air (OTA)</Text>
+              <Text style={styles.cardSubLabel}>
+                Verifique manualmente por atualizações de patch lançadas.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.btnAdicionarCustom, { marginTop: 10, backgroundColor: '#059669' }]}
+                onPress={checarAtualizacoesOTA}
+              >
+                <Text style={styles.btnAcaoTexto}>🔄 Buscar Patches Agora</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.cardSystemSlot}>
               <Text style={styles.cardTitulo}>Canal de Alertas Críticos (DND)</Text>
               <Text style={styles.cardSubLabel}>
