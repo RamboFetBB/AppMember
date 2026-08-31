@@ -31,6 +31,7 @@ interface EventoCustom {
   id: string;
   nome: string;
   horario: string;
+  notifId?: string | null;
 }
 
 interface CooldownState {
@@ -40,11 +41,12 @@ interface CooldownState {
   notifId: string | null;
 }
 
+// Configuração para exibir alertas e sons mesmo com o app aberto/em primeiro plano
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: false,
+    shouldSetBadge: true,
   }),
 });
 
@@ -117,10 +119,12 @@ export default function App(): React.JSX.Element {
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'Alertas Fixos',
+        name: 'Alertas Poke Membros',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
+        lightColor: '#2563EB',
+        enableVibrate: true,
+        showBadge: true,
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
     }
@@ -134,11 +138,13 @@ export default function App(): React.JSX.Element {
           title: titulo,
           body: corpo,
           sound: true,
-          sticky: true,
-          autoDismiss: false,
-          data: { autoDismiss: false },
+          vibrate: [0, 250, 250, 250],
+          priority: Notifications.AndroidNotificationPriority.HIGH,
         },
-        trigger: { seconds: segundos }
+        trigger: {
+          seconds: segundos,
+          channelId: 'default',
+        }
       });
     } catch (e) {
       console.warn('Erro ao agendar notificacao:', e);
@@ -164,7 +170,7 @@ export default function App(): React.JSX.Element {
 
         if (diffSegundos > 0) {
           await agendarNotificacao(
-            `Kira Alertas - ${ev.nome}`,
+            `Alertas Poke Membros - ${ev.nome}`,
             ev.aviso ? ev.aviso : `O evento ${ev.nome} comeca em 5 minutos!`,
             diffSegundos
           );
@@ -173,7 +179,7 @@ export default function App(): React.JSX.Element {
     }
   };
 
-  const cancelarNotificacao = async (id: string | null): Promise<void> => {
+  const cancelarNotificacao = async (id: string | null | undefined): Promise<void> => {
     if (id) {
       await Notifications.cancelScheduledNotificationAsync(id);
     }
@@ -192,8 +198,8 @@ export default function App(): React.JSX.Element {
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
       const notifId = await agendarNotificacao(
-        'Kira Alertas - Guilda',
-        'Voce ja pode se juntar a proxima guilda',
+        'Alertas Poke Membros - Guilda',
+        'Voce ja pode se juntar a proxima guilda!',
         COOLDOWN_1H01
       );
 
@@ -217,8 +223,8 @@ export default function App(): React.JSX.Element {
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
       const notifId = await agendarNotificacao(
-        'Kira Alertas - Alerta 24h',
-        'Ja se passaram 24h desde a ultima guilda',
+        'Alertas Poke Membros - Alerta 24h',
+        'Ja se passaram 24h desde a ultima guilda.',
         COOLDOWN_24H
       );
 
@@ -229,25 +235,57 @@ export default function App(): React.JSX.Element {
     }
   };
 
-  const adicionarEventoCustom = (): void => {
+  const adicionarEventoCustom = async (): Promise<void> => {
     if (!novoNome.trim() || !novoHorario.trim()) {
-      Alert.alert('Atencao', 'Preencha o nome e o horario do evento.');
+      Alert.alert('Atencao', 'Preencha o nome e o horario do evento (formato HH:MM).');
       return;
     }
+
+    const partes = novoHorario.trim().split(':');
+    if (partes.length !== 2 || isNaN(parseInt(partes[0], 10)) || isNaN(parseInt(partes[1], 10))) {
+      Alert.alert('Atencao', 'Informe o horario no formato correto Ex: 14:30');
+      return;
+    }
+
+    const hAlvo = parseInt(partes[0], 10);
+    const mAlvo = parseInt(partes[1], 10);
+
+    const agoraData = new Date();
+    const minutosAtuais = agoraData.getHours() * 60 + agoraData.getMinutes();
+    const segundosAtuais = agoraData.getSeconds();
+
+    const minutosAlvo = hAlvo * 60 + mAlvo;
+    let diffSegundos = (minutosAlvo - minutosAtuais) * 60 - segundosAtuais;
+
+    if (diffSegundos <= 0) {
+      // Se o horário já passou hoje, agenda para o mesmo horário no dia seguinte
+      diffSegundos += 86400;
+    }
+
+    const notifId = await agendarNotificacao(
+      `Alertas Poke Membros - ${novoNome.trim()}`,
+      `O seu alerta customizado "${novoNome.trim()}" esta acontecendo agora!`,
+      diffSegundos
+    );
 
     const novo: EventoCustom = {
       id: Date.now().toString(),
       nome: novoNome.trim(),
-      horario: novoHorario.trim()
+      horario: novoHorario.trim(),
+      notifId
     };
 
     setEventosCustom((prev) => [...prev, novo]);
     setNovoNome('');
     setNovoHorario('');
+    Alert.alert('Sucesso', `Alerta agendado para disparar em ${Math.floor(diffSegundos / 60)} minuto(s)!`);
   };
 
-  const removerEventoCustom = (id: string): void => {
-    setEventosCustom((prev) => prev.filter((ev) => ev.id !== id));
+  const removerEventoCustom = async (ev: EventoCustom): Promise<void> => {
+    if (ev.notifId) {
+      await cancelarNotificacao(ev.notifId);
+    }
+    setEventosCustom((prev) => prev.filter((item) => item.id !== ev.id));
   };
 
   const getMinutos = (horarioStr: string): number => {
@@ -470,7 +508,7 @@ export default function App(): React.JSX.Element {
             />
             <TextInput
               style={styles.inputCustom}
-              placeholder="Horario (ex: 20:30)"
+              placeholder="Horario exato (ex: 20:30)"
               placeholderTextColor="#64748B"
               value={novoHorario}
               onChangeText={setNovoHorario}
@@ -490,7 +528,7 @@ export default function App(): React.JSX.Element {
                   <Text style={styles.cardTitulo}>{ev.nome}</Text>
                   <Text style={styles.cardSub}>Horario: {ev.horario}</Text>
                 </View>
-                <TouchableOpacity onPress={() => removerEventoCustom(ev.id)} style={styles.btnDeletar}>
+                <TouchableOpacity onPress={() => removerEventoCustom(ev)} style={styles.btnDeletar}>
                   <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
                 </TouchableOpacity>
               </View>
@@ -510,7 +548,7 @@ export default function App(): React.JSX.Element {
       <View style={styles.header}>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerEmoji}>🛡️</Text>
-          <Text style={styles.headerTitle}>Kira Alertas Sistema</Text>
+          <Text style={styles.headerTitle}>Alertas Poke Membros Guilda Brasil</Text>
         </View>
         <View style={styles.clockBox}>
           <Text style={styles.clockIcon}>🕒</Text>
@@ -591,7 +629,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B132B'
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 14,
     backgroundColor: '#1C2541',
     flexDirection: 'row',
@@ -600,34 +638,37 @@ const styles = StyleSheet.create({
   },
   headerTitleBox: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8
   },
   headerEmoji: {
-    fontSize: 18,
-    marginRight: 8
+    fontSize: 16,
+    marginRight: 6
   },
   headerTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold'
+    fontSize: 13,
+    fontWeight: 'bold',
+    flexShrink: 1
   },
   clockBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#0B132B',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#3B82F6'
   },
   clockIcon: {
-    fontSize: 12,
-    marginRight: 5
+    fontSize: 11,
+    marginRight: 4
   },
   clockText: {
     color: '#38BDF8',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace'
   },
