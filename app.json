@@ -1,31 +1,46 @@
 {
   "expo": {
     "name": "Alertas Poke_membros",
-    "slug": "Alertas-PokeMembros",
+    "slug": "app-member",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "backgroundColor": "#0B132B",
-      "resizeMode": "contain"
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
     },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.alertas.pokemembros",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.pokemembros.app",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
-        "POST_NOTIFICATIONS"
+        "USE_EXACT_ALARM",
+        "VIBRATE"
       ]
     },
     "plugins": [
       [
         "expo-notifications",
         {
-          "color": "#2563EB",
-          "sounds": []
+          "icon": "./assets/notification-icon.png",
+          "color": "#2563EB"
         }
       ]
     ]
