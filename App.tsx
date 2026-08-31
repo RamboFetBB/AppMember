@@ -1061,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   rowSystemControl: {
     flexDirection: 'row',
-    justify.content: 'space-between',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 6
   },
