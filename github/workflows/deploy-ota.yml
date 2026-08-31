@@ -1,0 +1,32 @@
+name: Deploy OTA Update
+
+on:
+  push:
+    branches:
+      - main # Altere para 'master' se a sua branch principal usar esse nome
+
+jobs:
+  publish-ota:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚚 Checkout do código
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: ⚙️ Configurar Expo / EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Instalar dependências
+        run: npm ci
+
+      - name: 🚀 Lançar Patch OTA
+        run: eas update --auto --non-interactive
+        
