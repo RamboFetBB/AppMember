@@ -359,9 +359,11 @@ export default function App(): React.JSX.Element {
     }
   };
 
-  const getMinutos = (horarioStr: string): number => {
-    const partes = horarioStr.split(':');
-    return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
+  const formatarContador = (segundosTotais: number): string => {
+    const h = Math.floor(segundosTotais / 3600);
+    const m = Math.floor((segundosTotais % 3600) / 60);
+    const s = segundosTotais % 60;
+    return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
   };
 
   const getStatusEvento = (ev: EventoFixo): { status: string; tipoEstilo: string } => {
@@ -370,26 +372,39 @@ export default function App(): React.JSX.Element {
       return { status: 'HOJE NÃO', tipoEstilo: 'desativado' };
     }
 
-    const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
-    const segundosAtuais = agora.getSeconds();
-    const iniMin = getMinutos(ev.inicio);
-    const fimMin = ev.tipo === 'duracao' ? getMinutos(ev.fim) : iniMin + 5;
+    const [hIni, mIni] = ev.inicio.split(':').map(Number);
+    const dataInicioHoje = new Date(agora);
+    dataInicioHoje.setHours(hIni, mIni, 0, 0);
 
-    if (minutosAtuais >= iniMin && minutosAtuais < fimMin) {
+    const [hFim, mFim] = (ev.tipo === 'duracao' ? ev.fim : ev.inicio).split(':').map(Number);
+    const dataFimHoje = new Date(agora);
+    if (ev.tipo === 'duracao') {
+      dataFimHoje.setHours(hFim, mFim, 0, 0);
+    } else {
+      dataFimHoje.setHours(hIni, mIni + 5, 0, 0);
+    }
+
+    const agoraMs = agora.getTime();
+
+    if (agoraMs >= dataInicioHoje.getTime() && agoraMs < dataFimHoje.getTime()) {
       return { status: 'Em andamento', tipoEstilo: 'emAndamento' };
     }
 
-    if (minutosAtuais >= fimMin) {
-      return { status: 'Concluído hoje', tipoEstilo: 'concluido' };
+    if (agoraMs < dataInicioHoje.getTime()) {
+      const diffSegundos = Math.floor((dataInicioHoje.getTime() - agoraMs) / 1000);
+      return { status: `Falta ${formatarContador(diffSegundos)}`, tipoEstilo: 'pendente' };
     }
 
-    const diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
-    const h = Math.floor(diffMinutosTotal / 3600);
-    const m = Math.floor((diffMinutosTotal % 3600) / 60);
-    const s = diffMinutosTotal % 60;
+    // Regra específica para o Reset do Servidor (id: '1')
+    const ehResetServidor = ev.id === '1' || ev.nome.toLowerCase().includes('reset');
+    if (ehResetServidor) {
+      const dataInicioAmanha = new Date(dataInicioHoje);
+      dataInicioAmanha.setDate(dataInicioAmanha.getDate() + 1);
+      const diffSegundosAmanha = Math.floor((dataInicioAmanha.getTime() - agoraMs) / 1000);
+      return { status: `Falta ${formatarContador(diffSegundosAmanha)}`, tipoEstilo: 'pendente' };
+    }
 
-    const textoTempo = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
-    return { status: `Falta ${textoTempo}`, tipoEstilo: 'pendente' };
+    return { status: 'Concluído hoje', tipoEstilo: 'concluido' };
   };
 
   const formatarTempo = (segundos: number): string => {
@@ -662,7 +677,7 @@ export default function App(): React.JSX.Element {
         {abaInferior === 'dev' && (
           <View style={styles.painelContainer}>
             <Text style={styles.painelTitulo}>⚙️ Modos & Testes Dev</Text>
-            
+
             <View style={styles.cardSystemSlot}>
               <Text style={styles.cardTitulo}>Atualizações Over-The-Air (OTA)</Text>
               <Text style={styles.cardSubLabel}>
