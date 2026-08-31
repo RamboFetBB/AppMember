@@ -49,6 +49,7 @@ jobs:
         env:
           NODE_ENV: production
           EXPO_DEVTOOL_ENV: production
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
