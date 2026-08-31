@@ -12,6 +12,7 @@ import {
   Alert,
   Platform,
   Linking,
+  ActivityIndicator,
   ViewStyle,
   TextStyle
 } from 'react-native';
@@ -80,6 +81,12 @@ export default function App(): React.JSX.Element {
   const [novoHorario, setNovoHorario] = useState<string>('');
   const [modoDndAtivo, setModoDndAtivo] = useState<boolean>(true);
 
+  // Estados do Controle de Atualização OTA
+  const [statusOTA, setStatusOTA] = useState<string>('Nenhuma verificação realizada');
+  const [lastCheckOTA, setLastCheckOTA] = useState<string | null>(null);
+  const [loadingOTA, setLoadingOTA] = useState<boolean>(false);
+  const [isPendingOTA, setIsPendingOTA] = useState<boolean>(false);
+
   useEffect(() => {
     configurarNotificacoes();
     carregarDados();
@@ -118,22 +125,42 @@ export default function App(): React.JSX.Element {
   }, []);
 
   const checarAtualizacoesOTA = async () => {
-    if (__DEV__) return;
+    if (__DEV__) {
+      setStatusOTA('⚠️ Atualizações OTA desativadas no modo Expo Go / DEV.');
+      return;
+    }
+
+    setLoadingOTA(true);
+    setStatusOTA('Verificando atualizações no servidor...');
+
     try {
       const update = await Updates.checkForUpdateAsync();
+      const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastCheckOTA(horaAtual);
+
       if (update.isAvailable) {
+        setStatusOTA('Baixando nova versão...');
         await Updates.fetchUpdateAsync();
+        
+        setIsPendingOTA(true);
+        setStatusOTA('🟢 Atualização baixada! Reinicie o aplicativo.');
+
         Alert.alert(
-          '🚀 Patch de Atualização!',
-          'Uma nova versão do app foi baixada. Deseja reiniciar para aplicar as mudanças agora?',
+          '🚀 Patch Baixado!',
+          'A nova versão foi baixada com sucesso. Deseja reiniciar para aplicar as mudanças agora?',
           [
             { text: 'Mais tarde', style: 'cancel' },
             { text: 'Reiniciar Agora', onPress: () => Updates.reloadAsync() }
           ]
         );
+      } else {
+        setStatusOTA('✅ Você já está na versão mais recente.');
       }
     } catch (e) {
       console.log('Erro ao checar atualizações OTA:', e);
+      setStatusOTA('❌ Erro ao buscar atualização (Verifique a conexão).');
+    } finally {
+      setLoadingOTA(false);
     }
   };
 
@@ -698,6 +725,7 @@ export default function App(): React.JSX.Element {
           <View style={styles.painelContainer}>
             <Text style={styles.painelTitulo}>⚙️ Modos & Testes Dev</Text>
 
+            {/* Card de Atualizações OTA com feedbacks de status */}
             <View style={styles.cardSystemSlot}>
               <Text style={styles.cardTitulo}>Atualizações Over-The-Air (OTA)</Text>
               <Text style={styles.cardSubLabel}>
@@ -705,11 +733,32 @@ export default function App(): React.JSX.Element {
               </Text>
 
               <TouchableOpacity
-                style={[styles.btnAdicionarCustom, { marginTop: 10, backgroundColor: '#059669' }]}
-                onPress={checarAtualizacoesOTA}
+                style={[
+                  styles.btnAdicionarCustom,
+                  { marginTop: 10, backgroundColor: isPendingOTA ? '#D97706' : '#059669' }
+                ]}
+                onPress={isPendingOTA ? () => Updates.reloadAsync() : checarAtualizacoesOTA}
+                disabled={loadingOTA}
               >
-                <Text style={styles.btnAcaoTexto}>🔄 Buscar Patches Agora</Text>
+                {loadingOTA ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.btnAcaoTexto}>
+                    {isPendingOTA ? '🔄 Reiniciar para Aplicar Patch' : '🔄 Buscar Patches Agora'}
+                  </Text>
+                )}
               </TouchableOpacity>
+
+              <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#2A365C' }}>
+                <Text style={{ color: '#E2E8F0', fontSize: 12, fontWeight: '500' }}>
+                  {statusOTA}
+                </Text>
+                {lastCheckOTA && (
+                  <Text style={{ color: '#64748B', fontSize: 11, marginTop: 2 }}>
+                    Última verificação: {lastCheckOTA}
+                  </Text>
+                )}
+              </View>
             </View>
 
             <View style={styles.cardSystemSlot}>
@@ -1012,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   rowSystemControl: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justify.content: 'space-between',
     alignItems: 'center',
     marginTop: 6
   },
