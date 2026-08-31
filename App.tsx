@@ -11,11 +11,11 @@ import {
   StatusBar,
   Alert,
   Platform,
+  Linking,
   ViewStyle,
   TextStyle
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import * as IntentLauncher from 'expo-intent-launcher';
 
 interface EventoFixo {
   id: string;
@@ -307,7 +307,7 @@ export default function App(): React.JSX.Element {
 
   const abrirConfiguracoesDnd = () => {
     if (Platform.OS === 'android') {
-      IntentLauncher.startActivityAsync('android.settings.NOTIFICATION_POLICY_ACCESS_SETTINGS');
+      Linking.openSettings();
     } else {
       Alert.alert('Info', 'Recurso de canal exclusivo Android.');
     }
@@ -637,7 +637,7 @@ export default function App(): React.JSX.Element {
                 style={[styles.btnAdicionarCustom, { marginTop: 12, backgroundColor: '#334155' }]}
                 onPress={abrirConfiguracoesDnd}
               >
-                <Text style={styles.btnAcaoTexto}>📲 Abrir Permissões DND no Android</Text>
+                <Text style={styles.btnAcaoTexto}>📲 Abrir Permissões no Android</Text>
               </TouchableOpacity>
             </View>
 
