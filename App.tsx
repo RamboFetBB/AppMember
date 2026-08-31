@@ -15,6 +15,7 @@ import {
   TextStyle
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 interface EventoFixo {
   id: string;
@@ -41,7 +42,6 @@ interface CooldownState {
   notifId: string | null;
 }
 
-// Configuração para exibir alertas e sons mesmo com o app aberto/em primeiro plano
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -76,6 +76,7 @@ export default function App(): React.JSX.Element {
   const [eventosCustom, setEventosCustom] = useState<EventoCustom[]>([]);
   const [novoNome, setNovoNome] = useState<string>('');
   const [novoHorario, setNovoHorario] = useState<string>('');
+  const [modoDndAtivo, setModoDndAtivo] = useState<boolean>(true);
 
   useEffect(() => {
     configurarNotificacoes();
@@ -119,7 +120,7 @@ export default function App(): React.JSX.Element {
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'Alertas Poke Membros',
+        name: 'Alertas Poke Membros (Geral)',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#2563EB',
@@ -127,10 +128,24 @@ export default function App(): React.JSX.Element {
         showBadge: true,
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
+
+      await Notifications.setNotificationChannelAsync('channel_critical_alerts', {
+        name: 'Alertas Críticos (Furar DND + Tela)',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 500, 250, 500, 250, 500],
+        enableVibrate: true,
+        bypassDnd: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
     }
   };
 
-  const agendarNotificacao = async (titulo: string, corpo: string, segundos: number): Promise<string | null> => {
+  const agendarNotificacao = async (
+    titulo: string,
+    corpo: string,
+    segundos: number,
+    channelId: string = 'default'
+  ): Promise<string | null> => {
     if (segundos <= 0) return null;
     try {
       return await Notifications.scheduleNotificationAsync({
@@ -143,7 +158,7 @@ export default function App(): React.JSX.Element {
         },
         trigger: {
           seconds: segundos,
-          channelId: 'default',
+          channelId: channelId,
         }
       });
     } catch (e) {
@@ -258,14 +273,16 @@ export default function App(): React.JSX.Element {
     let diffSegundos = (minutosAlvo - minutosAtuais) * 60 - segundosAtuais;
 
     if (diffSegundos <= 0) {
-      // Se o horário já passou hoje, agenda para o mesmo horário no dia seguinte
       diffSegundos += 86400;
     }
+
+    const canalSelecionado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
 
     const notifId = await agendarNotificacao(
       `Alertas Poke Membros - ${novoNome.trim()}`,
       `O seu alerta customizado "${novoNome.trim()}" esta acontecendo agora!`,
-      diffSegundos
+      diffSegundos,
+      canalSelecionado
     );
 
     const novo: EventoCustom = {
@@ -286,6 +303,14 @@ export default function App(): React.JSX.Element {
       await cancelarNotificacao(ev.notifId);
     }
     setEventosCustom((prev) => prev.filter((item) => item.id !== ev.id));
+  };
+
+  const abrirConfiguracoesDnd = () => {
+    if (Platform.OS === 'android') {
+      IntentLauncher.startActivityAsync('android.settings.NOTIFICATION_POLICY_ACCESS_SETTINGS');
+    } else {
+      Alert.alert('Info', 'Recurso de canal exclusivo Android.');
+    }
   };
 
   const getMinutos = (horarioStr: string): number => {
@@ -557,7 +582,7 @@ export default function App(): React.JSX.Element {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {abaInferior === 'gerador' ? (
+        {abaInferior === 'gerador' && (
           <View style={styles.painelContainer}>
             <Text style={styles.painelTitulo}>🔔 Painel de Notificacoes</Text>
 
@@ -586,7 +611,46 @@ export default function App(): React.JSX.Element {
 
             {renderSubAbaContent()}
           </View>
-        ) : (
+        )}
+
+        {abaInferior === 'dev' && (
+          <View style={styles.painelContainer}>
+            <Text style={styles.painelTitulo}>⚙️ Modos & Testes Dev</Text>
+            
+            <View style={styles.cardSystemSlot}>
+              <Text style={styles.cardTitulo}>Canal de Alertas Críticos (DND)</Text>
+              <Text style={styles.cardSubLabel}>
+                Se ativo, novos alertas agendados usarão o canal crítico (vibração + furar Não Perturbe).
+              </Text>
+
+              <View style={styles.rowSystemControl}>
+                <Text style={styles.cardSub}>Furar Não Perturbe</Text>
+                <Switch
+                  value={modoDndAtivo}
+                  onValueChange={setModoDndAtivo}
+                  trackColor={{ false: '#334155', true: '#EF4444' }}
+                  thumbColor={modoDndAtivo ? '#F87171' : '#94A3B8'}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.btnAdicionarCustom, { marginTop: 12, backgroundColor: '#334155' }]}
+                onPress={abrirConfiguracoesDnd}
+              >
+                <Text style={styles.btnAcaoTexto}>📲 Abrir Permissões DND no Android</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.btnAdicionarCustom, { backgroundColor: '#2563EB', marginTop: 10 }]}
+              onPress={() => agendarNotificacao('⚡ Teste Dev', 'Testando alerta em 3 segundos!', 3, modoDndAtivo ? 'channel_critical_alerts' : 'default')}
+            >
+              <Text style={styles.btnAcaoTexto}>🚀 Disparar Notificação de Teste (3s)</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {abaInferior !== 'gerador' && abaInferior !== 'dev' && (
           <View style={styles.abaVaziaContainer}>
             <Text style={styles.abaVaziaTexto}>Tela: {abaInferior.toUpperCase()}</Text>
           </View>
