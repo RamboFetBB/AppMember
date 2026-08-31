@@ -3,7 +3,8 @@ name: Deploy OTA Update
 on:
   push:
     branches:
-      - main # Altere para 'master' se a sua branch principal usar esse nome
+      - main
+  workflow_dispatch: # Permite rodar manualmente pelo celular
 
 jobs:
   publish-ota:
@@ -29,4 +30,3 @@ jobs:
 
       - name: 🚀 Lançar Patch OTA
         run: eas update --auto --non-interactive
-        
