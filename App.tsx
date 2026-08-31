@@ -215,23 +215,40 @@ export default function App(): React.JSX.Element {
     await Notifications.cancelAllScheduledNotificationsAsync();
 
     const agoraRef = new Date();
+    const canalUsado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
+
     for (const ev of listaEventos) {
       if (ev.ativo) {
         const [hStr, mStr] = ev.inicio.split(':');
         const hora = parseInt(hStr, 10);
         const minuto = parseInt(mStr, 10);
 
-        const dataAlvo = new Date(agoraRef);
-        dataAlvo.setHours(hora, minuto - 5, 0, 0);
-
-        if (dataAlvo.getTime() <= agoraRef.getTime()) {
-          dataAlvo.setDate(dataAlvo.getDate() + 1);
+        // Alerta 1: 5 Minutos Antes
+        const dataAlvo5m = new Date(agoraRef);
+        dataAlvo5m.setHours(hora, minuto - 5, 0, 0);
+        if (dataAlvo5m.getTime() <= agoraRef.getTime()) {
+          dataAlvo5m.setDate(dataAlvo5m.getDate() + 1);
         }
 
         await agendarNotificacaoExata(
-          `Alertas Poke Membros - ${ev.nome}`,
+          `Alertas Poke Membros - ${ev.nome} (5m)`,
           ev.aviso ? ev.aviso : `O evento ${ev.nome} começa em 5 minutos!`,
-          dataAlvo
+          dataAlvo5m,
+          canalUsado
+        );
+
+        // Alerta 2: 1 Minuto Antes
+        const dataAlvo1m = new Date(agoraRef);
+        dataAlvo1m.setHours(hora, minuto - 1, 0, 0);
+        if (dataAlvo1m.getTime() <= agoraRef.getTime()) {
+          dataAlvo1m.setDate(dataAlvo1m.getDate() + 1);
+        }
+
+        await agendarNotificacaoExata(
+          `Alertas Poke Membros - ${ev.nome} (1m)`,
+          `Atenção! Falta apenas 1 minuto para o evento ${ev.nome}!`,
+          dataAlvo1m,
+          canalUsado
         );
       }
     }
@@ -256,10 +273,12 @@ export default function App(): React.JSX.Element {
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
       const dataAlvo = new Date(fimTimestamp);
+      const canalUsado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
       const notifId = await agendarNotificacaoExata(
         'Alertas Poke Membros - Guilda',
         'Você já pode se juntar à próxima guilda!',
-        dataAlvo
+        dataAlvo,
+        canalUsado
       );
 
       setCooldowns((prev) => ({
@@ -282,10 +301,12 @@ export default function App(): React.JSX.Element {
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
       const dataAlvo = new Date(fimTimestamp);
+      const canalUsado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
       const notifId = await agendarNotificacaoExata(
         'Alertas Poke Membros - Alerta 24h',
         'Já se passaram 24h desde a última guilda.',
-        dataAlvo
+        dataAlvo,
+        canalUsado
       );
 
       setCooldowns((prev) => ({
@@ -395,7 +416,6 @@ export default function App(): React.JSX.Element {
       return { status: `Falta ${formatarContador(diffSegundos)}`, tipoEstilo: 'pendente' };
     }
 
-    // Regra específica para o Reset do Servidor (id: '1')
     const ehResetServidor = ev.id === '1' || ev.nome.toLowerCase().includes('reset');
     if (ehResetServidor) {
       const dataInicioAmanha = new Date(dataInicioHoje);
@@ -475,7 +495,7 @@ export default function App(): React.JSX.Element {
             })}
           </View>
 
-          <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m antes):</Text>
+          <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m e 1m antes):</Text>
           <View style={styles.botoesAcaoRow}>
             <TouchableOpacity
               style={styles.btnAtivarTodas}
@@ -506,7 +526,7 @@ export default function App(): React.JSX.Element {
                 <Text style={styles.cardSub}>
                   Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
                 </Text>
-                <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
+                <Text style={styles.cardNotiInfo}>⚡ Notifica 5m e 1m antes</Text>
               </View>
               <Switch
                 value={ev.ativo}
