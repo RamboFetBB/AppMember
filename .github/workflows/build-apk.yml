@@ -31,10 +31,7 @@ jobs:
           java-version: '17'
 
       - name: Install dependencies
-        run: |
-          npm cache clean --force
-          npm install --force
-          npm install --save-dev @babel/preset-typescript @babel/preset-react
+        run: npm install --force
 
       - name: Prebuild Expo Native Project
         run: npx expo prebuild --platform android --clean
@@ -56,4 +53,3 @@ jobs:
         with:
           name: Alertas-PokeMembros-APK
           path: android/app/build/outputs/apk/release/app-release.apk
-          
