@@ -16,16 +16,15 @@ jobs:
       - name: 🟢 Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: ⚙️ Configurar Expo / EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          node-version: 22
 
       - name: 📦 Instalar dependências
         run: npm install --force
 
+      - name: ⚙️ Instalar EAS CLI
+        run: npm install -g eas-cli
+
       - name: 🚀 Lançar Patch OTA
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: eas update --auto --non-interactive
