@@ -16,6 +16,7 @@ import {
   TextStyle
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface EventoFixo {
   id: string;
@@ -80,6 +81,8 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     configurarNotificacoes();
+    carregarDados();
+
     const timer = setInterval(() => {
       const agoraAtual = new Date();
       setAgora(agoraAtual);
@@ -112,6 +115,26 @@ export default function App(): React.JSX.Element {
     return () => clearInterval(timer);
   }, []);
 
+  const carregarDados = async () => {
+    try {
+      const savedEventos = await AsyncStorage.getItem('@eventos_fixos');
+      const savedCustom = await AsyncStorage.getItem('@eventos_custom');
+      if (savedEventos) setEventos(JSON.parse(savedEventos));
+      if (savedCustom) setEventosCustom(JSON.parse(savedCustom));
+    } catch (e) {
+      console.warn('Erro ao carregar dados locais:', e);
+    }
+  };
+
+  const salvarEventosFixos = async (novos: EventoFixo[]) => {
+    setEventos(novos);
+    try {
+      await AsyncStorage.setItem('@eventos_fixos', JSON.stringify(novos));
+    } catch (e) {
+      console.warn('Erro ao salvar eventos fixos:', e);
+    }
+  };
+
   const configurarNotificacoes = async (): Promise<void> => {
     const perm = await Notifications.getPermissionsAsync();
     if (perm.status !== 'granted') {
@@ -140,13 +163,12 @@ export default function App(): React.JSX.Element {
     }
   };
 
-  const agendarNotificacao = async (
+  const agendarNotificacaoExata = async (
     titulo: string,
     corpo: string,
-    segundos: number,
+    dataAlvo: Date,
     channelId: string = 'default'
   ): Promise<string | null> => {
-    if (segundos <= 0) return null;
     try {
       return await Notifications.scheduleNotificationAsync({
         content: {
@@ -157,9 +179,9 @@ export default function App(): React.JSX.Element {
           priority: Notifications.AndroidNotificationPriority.HIGH,
         },
         trigger: {
-          seconds: segundos,
+          date: dataAlvo,
           channelId: channelId,
-        }
+        } as any,
       });
     } catch (e) {
       console.warn('Erro ao agendar notificacao:', e);
@@ -170,26 +192,25 @@ export default function App(): React.JSX.Element {
   const agendarEventosAtivos = async (listaEventos: EventoFixo[]): Promise<void> => {
     await Notifications.cancelAllScheduledNotificationsAsync();
 
-    const diaAtual = agora.getDay();
-    const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
-    const segundosAtuais = agora.getSeconds();
+    const agoraRef = new Date();
+    for (const ev of listaEventos) {
+      if (ev.ativo) {
+        const [hStr, mStr] = ev.inicio.split(':');
+        const hora = parseInt(hStr, 10);
+        const minuto = parseInt(mStr, 10);
 
-    for (let i = 0; i < listaEventos.length; i++) {
-      const ev = listaEventos[i];
-      if (ev.ativo && ev.dias && ev.dias.includes(diaAtual)) {
-        const partes = ev.inicio.split(':');
-        const iniMin = parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
-        
-        const alvoMin = iniMin - 5; 
-        const diffSegundos = (alvoMin - minutosAtuais) * 60 - segundosAtuais;
+        const dataAlvo = new Date(agoraRef);
+        dataAlvo.setHours(hora, minuto - 5, 0, 0);
 
-        if (diffSegundos > 0) {
-          await agendarNotificacao(
-            `Alertas Poke Membros - ${ev.nome}`,
-            ev.aviso ? ev.aviso : `O evento ${ev.nome} comeca em 5 minutos!`,
-            diffSegundos
-          );
+        if (dataAlvo.getTime() <= agoraRef.getTime()) {
+          dataAlvo.setDate(dataAlvo.getDate() + 1);
         }
+
+        await agendarNotificacaoExata(
+          `Alertas Poke Membros - ${ev.nome}`,
+          ev.aviso ? ev.aviso : `O evento ${ev.nome} começa em 5 minutos!`,
+          dataAlvo
+        );
       }
     }
   };
@@ -212,10 +233,11 @@ export default function App(): React.JSX.Element {
       }));
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
-      const notifId = await agendarNotificacao(
+      const dataAlvo = new Date(fimTimestamp);
+      const notifId = await agendarNotificacaoExata(
         'Alertas Poke Membros - Guilda',
-        'Voce ja pode se juntar a proxima guilda!',
-        COOLDOWN_1H01
+        'Você já pode se juntar à próxima guilda!',
+        dataAlvo
       );
 
       setCooldowns((prev) => ({
@@ -237,10 +259,11 @@ export default function App(): React.JSX.Element {
       }));
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
-      const notifId = await agendarNotificacao(
+      const dataAlvo = new Date(fimTimestamp);
+      const notifId = await agendarNotificacaoExata(
         'Alertas Poke Membros - Alerta 24h',
-        'Ja se passaram 24h desde a ultima guilda.',
-        COOLDOWN_24H
+        'Já se passaram 24h desde a última guilda.',
+        dataAlvo
       );
 
       setCooldowns((prev) => ({
@@ -252,36 +275,32 @@ export default function App(): React.JSX.Element {
 
   const adicionarEventoCustom = async (): Promise<void> => {
     if (!novoNome.trim() || !novoHorario.trim()) {
-      Alert.alert('Atencao', 'Preencha o nome e o horario do evento (formato HH:MM).');
+      Alert.alert('Atenção', 'Preencha o nome e o horário do evento (formato HH:MM).');
       return;
     }
 
     const partes = novoHorario.trim().split(':');
     if (partes.length !== 2 || isNaN(parseInt(partes[0], 10)) || isNaN(parseInt(partes[1], 10))) {
-      Alert.alert('Atencao', 'Informe o horario no formato correto Ex: 14:30');
+      Alert.alert('Atenção', 'Informe o horário no formato correto Ex: 14:30');
       return;
     }
 
     const hAlvo = parseInt(partes[0], 10);
     const mAlvo = parseInt(partes[1], 10);
 
-    const agoraData = new Date();
-    const minutosAtuais = agoraData.getHours() * 60 + agoraData.getMinutes();
-    const segundosAtuais = agoraData.getSeconds();
+    const dataAlvo = new Date();
+    dataAlvo.setHours(hAlvo, mAlvo, 0, 0);
 
-    const minutosAlvo = hAlvo * 60 + mAlvo;
-    let diffSegundos = (minutosAlvo - minutosAtuais) * 60 - segundosAtuais;
-
-    if (diffSegundos <= 0) {
-      diffSegundos += 86400;
+    if (dataAlvo.getTime() <= Date.now()) {
+      dataAlvo.setDate(dataAlvo.getDate() + 1);
     }
 
     const canalSelecionado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
 
-    const notifId = await agendarNotificacao(
+    const notifId = await agendarNotificacaoExata(
       `Alertas Poke Membros - ${novoNome.trim()}`,
-      `O seu alerta customizado "${novoNome.trim()}" esta acontecendo agora!`,
-      diffSegundos,
+      `O seu alerta customizado "${novoNome.trim()}" está acontecendo agora!`,
+      dataAlvo,
       canalSelecionado
     );
 
@@ -292,17 +311,22 @@ export default function App(): React.JSX.Element {
       notifId
     };
 
-    setEventosCustom((prev) => [...prev, novo]);
+    const listaAtualizada = [...eventosCustom, novo];
+    setEventosCustom(listaAtualizada);
+    await AsyncStorage.setItem('@eventos_custom', JSON.stringify(listaAtualizada));
+
     setNovoNome('');
     setNovoHorario('');
-    Alert.alert('Sucesso', `Alerta agendado para disparar em ${Math.floor(diffSegundos / 60)} minuto(s)!`);
+    Alert.alert('Sucesso', 'Alerta customizado agendado com sucesso!');
   };
 
   const removerEventoCustom = async (ev: EventoCustom): Promise<void> => {
     if (ev.notifId) {
       await cancelarNotificacao(ev.notifId);
     }
-    setEventosCustom((prev) => prev.filter((item) => item.id !== ev.id));
+    const listaAtualizada = eventosCustom.filter((item) => item.id !== ev.id);
+    setEventosCustom(listaAtualizada);
+    await AsyncStorage.setItem('@eventos_custom', JSON.stringify(listaAtualizada));
   };
 
   const abrirConfiguracoesDnd = () => {
@@ -321,7 +345,7 @@ export default function App(): React.JSX.Element {
   const getStatusEvento = (ev: EventoFixo): { status: string; tipoEstilo: string } => {
     const diaAtual = agora.getDay();
     if (ev.dias && !ev.dias.includes(diaAtual)) {
-      return { status: 'HOJE NAO', tipoEstilo: 'desativado' };
+      return { status: 'HOJE NÃO', tipoEstilo: 'desativado' };
     }
 
     const minutosAtuais = agora.getHours() * 60 + agora.getMinutes();
@@ -334,7 +358,7 @@ export default function App(): React.JSX.Element {
     }
 
     if (minutosAtuais >= fimMin) {
-      return { status: 'Concluido hoje', tipoEstilo: 'concluido' };
+      return { status: 'Concluído hoje', tipoEstilo: 'concluido' };
     }
 
     const diffMinutosTotal = (iniMin - minutosAtuais) * 60 - segundosAtuais;
@@ -376,11 +400,11 @@ export default function App(): React.JSX.Element {
     if (subAba === 'fixos') {
       return (
         <View>
-          <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diarios:</Text>
+          <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
           <View style={styles.timelineBox}>
             {eventos.map((ev) => {
               const infoStatus = getStatusEvento(ev);
-              
+
               let badgeStyle: ViewStyle = styles.badgePendente;
               let badgeTextStyle: TextStyle = styles.badgeTextoPendente;
 
@@ -414,13 +438,13 @@ export default function App(): React.JSX.Element {
             })}
           </View>
 
-          <Text style={styles.secaoHeader}>⚡ Notificacoes Automaticas (5m antes):</Text>
+          <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m antes):</Text>
           <View style={styles.botoesAcaoRow}>
             <TouchableOpacity
               style={styles.btnAtivarTodas}
               onPress={() => {
                 const novas = eventos.map((e) => ({ ...e, ativo: true }));
-                setEventos(novas);
+                salvarEventosFixos(novas);
                 agendarEventosAtivos(novas);
               }}
             >
@@ -430,7 +454,7 @@ export default function App(): React.JSX.Element {
               style={styles.btnDesativarTodas}
               onPress={() => {
                 const novas = eventos.map((e) => ({ ...e, ativo: false }));
-                setEventos(novas);
+                salvarEventosFixos(novas);
                 Notifications.cancelAllScheduledNotificationsAsync();
               }}
             >
@@ -443,7 +467,7 @@ export default function App(): React.JSX.Element {
               <View style={styles.cardTimelineInfo}>
                 <Text style={styles.cardTitulo}>{ev.nome}</Text>
                 <Text style={styles.cardSub}>
-                  Horario: {ev.tipo === 'duracao' ? `${ev.inicio} as ${ev.fim}` : ev.inicio}
+                  Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
                 </Text>
                 <Text style={styles.cardNotiInfo}>⚡ Notifica 5m antes</Text>
               </View>
@@ -451,7 +475,7 @@ export default function App(): React.JSX.Element {
                 value={ev.ativo}
                 onValueChange={() => {
                   const novas = eventos.map((e) => e.id === ev.id ? { ...e, ativo: !e.ativo } : e);
-                  setEventos(novas);
+                  salvarEventosFixos(novas);
                   agendarEventosAtivos(novas);
                 }}
                 trackColor={{ false: '#334155', true: '#059669' }}
@@ -533,7 +557,7 @@ export default function App(): React.JSX.Element {
             />
             <TextInput
               style={styles.inputCustom}
-              placeholder="Horario exato (ex: 20:30)"
+              placeholder="Horário exato (ex: 20:30)"
               placeholderTextColor="#64748B"
               value={novoHorario}
               onChangeText={setNovoHorario}
@@ -551,7 +575,7 @@ export default function App(): React.JSX.Element {
               <View key={ev.id} style={styles.cardToggle}>
                 <View style={styles.cardTimelineInfo}>
                   <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                  <Text style={styles.cardSub}>Horario: {ev.horario}</Text>
+                  <Text style={styles.cardSub}>Horário: {ev.horario}</Text>
                 </View>
                 <TouchableOpacity onPress={() => removerEventoCustom(ev)} style={styles.btnDeletar}>
                   <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
@@ -584,7 +608,7 @@ export default function App(): React.JSX.Element {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {abaInferior === 'gerador' && (
           <View style={styles.painelContainer}>
-            <Text style={styles.painelTitulo}>🔔 Painel de Notificacoes</Text>
+            <Text style={styles.painelTitulo}>🔔 Painel de Notificações</Text>
 
             <View style={styles.subAbasContainer}>
               <TouchableOpacity
@@ -605,7 +629,7 @@ export default function App(): React.JSX.Element {
                 style={getSubAbaBtnStyle('custom')}
                 onPress={() => setSubAba('custom')}
               >
-                <Text style={getSubAbaTextoStyle('custom')}>Customizavel</Text>
+                <Text style={getSubAbaTextoStyle('custom')}>Customizável</Text>
               </TouchableOpacity>
             </View>
 
@@ -643,7 +667,10 @@ export default function App(): React.JSX.Element {
 
             <TouchableOpacity
               style={[styles.btnAdicionarCustom, { backgroundColor: '#2563EB', marginTop: 10 }]}
-              onPress={() => agendarNotificacao('⚡ Teste Dev', 'Testando alerta em 3 segundos!', 3, modoDndAtivo ? 'channel_critical_alerts' : 'default')}
+              onPress={() => {
+                const d = new Date(Date.now() + 3000);
+                agendarNotificacaoExata('⚡ Teste Dev', 'Testando alerta em 3 segundos!', d, modoDndAtivo ? 'channel_critical_alerts' : 'default');
+              }}
             >
               <Text style={styles.btnAcaoTexto}>🚀 Disparar Notificação de Teste (3s)</Text>
             </TouchableOpacity>
@@ -670,7 +697,7 @@ export default function App(): React.JSX.Element {
 
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('historico')}>
           <Text style={styles.navIcon}>📜</Text>
-          <Text style={getNavTextStyle('historico')}>Historico</Text>
+          <Text style={getNavTextStyle('historico')}>Histórico</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('guilda')}>
