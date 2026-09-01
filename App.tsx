@@ -91,7 +91,7 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     configurarNotificacoes();
     carregarDados();
-    checarEInstalarAPK(true); // Apenas busca as informações da release ao iniciar
+    checarEInstalarAPK(true);
 
     const timer = setInterval(() => {
       const agoraAtual = new Date();
@@ -146,7 +146,6 @@ export default function App(): React.JSX.Element {
 
       const data = await response.json();
 
-      // Formatar Data e Hora da Release
       if (data.published_at) {
         const dateObj = new Date(data.published_at);
         const dataFormatada = dateObj.toLocaleDateString('pt-BR');
@@ -167,7 +166,6 @@ export default function App(): React.JSX.Element {
         return;
       }
 
-      // Iniciar o Download
       setStatusUpdate('Baixando APK (0%)...');
       const apkUrl = apkAsset.browser_download_url;
       const fileUri = `${FileSystem.documentDirectory}update.apk`;
@@ -192,11 +190,22 @@ export default function App(): React.JSX.Element {
       setStatusUpdate('🟢 Download concluído! Abrindo instalador...');
       const contentUri = await FileSystem.getContentUriAsync(result.uri);
 
-      // Abrir instalador do Android
-      await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
-        data: contentUri,
-        flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-      });
+      // Tenta abrir o instalador do Android com tratamento de exceção de permissão
+      try {
+        await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
+          data: contentUri,
+          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+        });
+      } catch (e) {
+        Alert.alert(
+          'Permissão Requerida',
+          'Conceda a permissão de "Instalar apps desconhecidos" para o aplicativo nas configurações do seu Android.',
+          [
+            { text: 'Abrir Configurações', onPress: () => Linking.openSettings() },
+            { text: 'Cancelar', style: 'cancel' }
+          ]
+        );
+      }
 
     } catch (e: any) {
       console.log('Erro ao buscar/instalar APK:', e);
@@ -323,12 +332,12 @@ export default function App(): React.JSX.Element {
         const hora = parseInt(hStr, 10);
         const minuto = parseInt(mStr, 10);
 
+        // --- ALARME 5 MINUTOS ANTES ---
         const dataAlvo5m = new Date(agoraRef);
         dataAlvo5m.setHours(hora, minuto - 5, 0, 0);
         if (dataAlvo5m.getTime() <= agoraRef.getTime()) {
           dataAlvo5m.setDate(dataAlvo5m.getDate() + 1);
         }
-
         await agendarNotificacaoExata(
           `Alertas Poke Membros - ${ev.nome} (5m)`,
           ev.aviso ? ev.aviso : `O evento ${ev.nome} começa em 5 minutos!`,
@@ -336,16 +345,29 @@ export default function App(): React.JSX.Element {
           canalUsado
         );
 
+        // --- ALARME 1 MINUTO ANTES ---
         const dataAlvo1m = new Date(agoraRef);
         dataAlvo1m.setHours(hora, minuto - 1, 0, 0);
         if (dataAlvo1m.getTime() <= agoraRef.getTime()) {
           dataAlvo1m.setDate(dataAlvo1m.getDate() + 1);
         }
-
         await agendarNotificacaoExata(
           `Alertas Poke Membros - ${ev.nome} (1m)`,
           `Atenção! Falta apenas 1 minuto para o evento ${ev.nome}!`,
           dataAlvo1m,
+          canalUsado
+        );
+
+        // --- ALARME NO EXATO MOMENTO (0m) ---
+        const dataAlvo0m = new Date(agoraRef);
+        dataAlvo0m.setHours(hora, minuto, 0, 0);
+        if (dataAlvo0m.getTime() <= agoraRef.getTime()) {
+          dataAlvo0m.setDate(dataAlvo0m.getDate() + 1);
+        }
+        await agendarNotificacaoExata(
+          `Alertas Poke Membros - ${ev.nome} (INICIOU)`,
+          `O evento ${ev.nome} começou agora!`,
+          dataAlvo0m,
           canalUsado
         );
       }
@@ -679,7 +701,7 @@ export default function App(): React.JSX.Element {
             })}
           </View>
 
-          <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m e 1m antes):</Text>
+          <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m, 1m e Início):</Text>
           <View style={styles.botoesAcaoRow}>
             <TouchableOpacity
               style={styles.btnAtivarTodas}
@@ -710,7 +732,7 @@ export default function App(): React.JSX.Element {
                 <Text style={styles.cardSub}>
                   Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
                 </Text>
-                <Text style={styles.cardNotiInfo}>⚡ Notifica 5m e 1m antes</Text>
+                <Text style={styles.cardNotiInfo}>⚡ Notifica 5m, 1m antes e no início</Text>
               </View>
               <Switch
                 value={ev.ativo}
@@ -923,7 +945,6 @@ export default function App(): React.JSX.Element {
                 )}
               </TouchableOpacity>
 
-              {/* EXIBIÇÃO DA DATA E HORA DA ÚLTIMA RELEASE DISPONÍVEL */}
               <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#2A365C' }}>
                 <Text style={{ color: '#E2E8F0', fontSize: 12, fontWeight: '500' }}>
                   {statusUpdate}
@@ -1266,7 +1287,7 @@ const styles = StyleSheet.create({
   },
   rowSystemControl: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justify.content: 'space-between',
     alignItems: 'center',
     marginTop: 6
   },
