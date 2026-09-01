@@ -168,10 +168,41 @@ export default function App(): React.JSX.Element {
     try {
       const savedEventos = await AsyncStorage.getItem('@eventos_fixos');
       const savedCustom = await AsyncStorage.getItem('@eventos_custom');
+      const savedCooldowns = await AsyncStorage.getItem('@cooldowns_state');
+
       if (savedEventos) setEventos(JSON.parse(savedEventos));
       if (savedCustom) setEventosCustom(JSON.parse(savedCustom));
+
+      if (savedCooldowns) {
+        const parsed: Record<string, CooldownState> = JSON.parse(savedCooldowns);
+        const agoraMs = Date.now();
+        const revalidados: Record<string, CooldownState> = {};
+
+        Object.keys(parsed).forEach((key) => {
+          const item = parsed[key];
+          if (item && item.ativo) {
+            const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
+            revalidados[key] = {
+              ...item,
+              ativo: restante > 0,
+              tempoRestante: restante
+            };
+          }
+        });
+
+        setCooldowns(revalidados);
+      }
     } catch (e) {
       console.warn('Erro ao carregar dados locais:', e);
+    }
+  };
+
+  const salvarCooldowns = async (novos: Record<string, CooldownState>) => {
+    setCooldowns(novos);
+    try {
+      await AsyncStorage.setItem('@cooldowns_state', JSON.stringify(novos));
+    } catch (e) {
+      console.warn('Erro ao salvar cooldowns:', e);
     }
   };
 
@@ -293,10 +324,11 @@ export default function App(): React.JSX.Element {
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns((prev) => ({
-        ...prev,
+      const novos = {
+        ...cooldowns,
         [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
-      }));
+      };
+      salvarCooldowns(novos);
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_1H01 * 1000;
       const dataAlvo = new Date(fimTimestamp);
@@ -308,10 +340,11 @@ export default function App(): React.JSX.Element {
         canalUsado
       );
 
-      setCooldowns((prev) => ({
-        ...prev,
+      const novos = {
+        ...cooldowns,
         [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_1H01, notifId }
-      }));
+      };
+      salvarCooldowns(novos);
     }
   };
 
@@ -321,10 +354,11 @@ export default function App(): React.JSX.Element {
 
     if (estadoAtual && estadoAtual.ativo) {
       await cancelarNotificacao(estadoAtual.notifId);
-      setCooldowns((prev) => ({
-        ...prev,
+      const novos = {
+        ...cooldowns,
         [key]: { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null }
-      }));
+      };
+      salvarCooldowns(novos);
     } else {
       const fimTimestamp = Date.now() + COOLDOWN_24H * 1000;
       const dataAlvo = new Date(fimTimestamp);
@@ -336,10 +370,11 @@ export default function App(): React.JSX.Element {
         canalUsado
       );
 
-      setCooldowns((prev) => ({
-        ...prev,
+      const novos = {
+        ...cooldowns,
         [key]: { ativo: true, fimTimestamp, tempoRestante: COOLDOWN_24H, notifId }
-      }));
+      };
+      salvarCooldowns(novos);
     }
   };
 
@@ -725,7 +760,6 @@ export default function App(): React.JSX.Element {
           <View style={styles.painelContainer}>
             <Text style={styles.painelTitulo}>⚙️ Modos & Testes Dev</Text>
 
-            {/* Card de Atualizações OTA com feedbacks de status */}
             <View style={styles.cardSystemSlot}>
               <Text style={styles.cardTitulo}>Atualizações Over-The-Air (OTA)</Text>
               <Text style={styles.cardSubLabel}>
