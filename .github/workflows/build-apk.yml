@@ -15,6 +15,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -22,11 +23,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v3
+
       - name: Install dependencies
         run: npm install --force
 
       - name: Prebuild Expo Native Project
-        run: npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android
         env:
           NODE_ENV: production
 
@@ -34,7 +38,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -x test
+          ./gradlew assembleRelease --no-daemon --build-cache -Dorg.gradle.parallel=true
         env:
           NODE_ENV: production
           EXPO_DEVTOOL_ENV: production
