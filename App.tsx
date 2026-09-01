@@ -25,7 +25,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 interface EventoFixo {
   id: string;
   nome: string;
-  inicio: string;
+  inicio: string[];
   fim?: string;
   tipo: 'ponto' | 'duracao';
   ativo: boolean;
@@ -56,14 +56,14 @@ Notifications.setNotificationHandler({
 });
 
 const EVENTOS_FIXOS_INICIAIS: EventoFixo[] = [
-  { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '2', nome: 'Interserver Duplo', inicio: '07:00', fim: '11:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '3', nome: 'Transporte Duplo', inicio: '09:00', fim: '10:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '4', nome: 'GvG (GuildasXGuildas)', inicio: '15:30', fim: '15:35', tipo: 'ponto', ativo: true, dias: [6], aviso: 'A GvG ira iniciar em breve!' },
-  { id: '5', nome: 'Boss', inicio: '16:00', fim: '16:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '6', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '7', nome: 'Evento Fixo Extra 1', inicio: '20:00', fim: '20:05', tipo: 'ponto', ativo: false, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '8', nome: 'Evento Fixo Extra 2', inicio: '21:00', fim: '21:05', tipo: 'ponto', ativo: false, dias: [0, 1, 2, 3, 4, 5, 6] }
+  { id: '1', nome: 'Reset Servidor', inicio: ['01:00'], fim: '01:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '2', nome: 'Interserver Duplo', inicio: ['07:00'], fim: '11:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '3', nome: 'Transporte Duplo', inicio: ['09:00'], fim: '10:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '4', nome: 'GvG (GuildasXGuildas)', inicio: ['15:30'], fim: '15:35', tipo: 'ponto', ativo: true, dias: [6], aviso: 'A GvG ira iniciar em breve!' },
+  { id: '5', nome: 'Boss', inicio: ['16:00'], fim: '16:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '6', nome: 'Riot', inicio: ['17:00'], fim: '17:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '7', nome: 'Evento Fixo Extra 1', inicio: ['20:00'], fim: '20:05', tipo: 'ponto', ativo: false, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '8', nome: 'Evento Fixo Extra 2', inicio: ['21:00'], fim: '21:05', tipo: 'ponto', ativo: false, dias: [0, 1, 2, 3, 4, 5, 6] }
 ];
 
 const DIAS_SLOTS: string[] = [
@@ -167,7 +167,11 @@ export default function App(): React.JSX.Element {
 
       let listaFixos = EVENTOS_FIXOS_INICIAIS;
       if (savedEventos) {
-        listaFixos = JSON.parse(savedEventos);
+        const parsed = JSON.parse(savedEventos);
+        listaFixos = parsed.map((item: any) => ({
+          ...item,
+          inicio: Array.isArray(item.inicio) ? item.inicio : [item.inicio]
+        }));
       }
       setEventos(listaFixos);
       agendarEventosAtivos(listaFixos);
@@ -359,45 +363,47 @@ export default function App(): React.JSX.Element {
 
     for (const ev of listaEventos) {
       if (ev.ativo) {
-        const [hStr, mStr] = ev.inicio.split(':');
-        const hora = parseInt(hStr, 10);
-        const minuto = parseInt(mStr, 10);
+        for (const horStr of ev.inicio) {
+          const [hStr, mStr] = horStr.split(':');
+          const hora = parseInt(hStr, 10);
+          const minuto = parseInt(mStr, 10);
 
-        const dataAlvo5m = new Date(agoraRef);
-        dataAlvo5m.setHours(hora, minuto - 5, 0, 0);
-        if (dataAlvo5m.getTime() <= agoraRef.getTime()) {
-          dataAlvo5m.setDate(dataAlvo5m.getDate() + 1);
-        }
-        await agendarNotificacaoExata(
-          `Alertas Poke Membros - ${ev.nome} (5m)`,
-          ev.aviso ? ev.aviso : `O evento ${ev.nome} começa em 5 minutos!`,
-          dataAlvo5m,
-          canalUsado
-        );
+          const dataAlvo5m = new Date(agoraRef);
+          dataAlvo5m.setHours(hora, minuto - 5, 0, 0);
+          if (dataAlvo5m.getTime() <= agoraRef.getTime()) {
+            dataAlvo5m.setDate(dataAlvo5m.getDate() + 1);
+          }
+          await agendarNotificacaoExata(
+            `Alertas Poke Membros - ${ev.nome} (5m)`,
+            ev.aviso ? ev.aviso : `O evento ${ev.nome} começa em 5 minutos!`,
+            dataAlvo5m,
+            canalUsado
+          );
 
-        const dataAlvo1m = new Date(agoraRef);
-        dataAlvo1m.setHours(hora, minuto - 1, 0, 0);
-        if (dataAlvo1m.getTime() <= agoraRef.getTime()) {
-          dataAlvo1m.setDate(dataAlvo1m.getDate() + 1);
-        }
-        await agendarNotificacaoExata(
-          `Alertas Poke Membros - ${ev.nome} (1m)`,
-          `Atenção! Falta apenas 1 minuto para o evento ${ev.nome}!`,
-          dataAlvo1m,
-          canalUsado
-        );
+          const dataAlvo1m = new Date(agoraRef);
+          dataAlvo1m.setHours(hora, minuto - 1, 0, 0);
+          if (dataAlvo1m.getTime() <= agoraRef.getTime()) {
+            dataAlvo1m.setDate(dataAlvo1m.getDate() + 1);
+          }
+          await agendarNotificacaoExata(
+            `Alertas Poke Membros - ${ev.nome} (1m)`,
+            `Atenção! Falta apenas 1 minuto para o evento ${ev.nome}!`,
+            dataAlvo1m,
+            canalUsado
+          );
 
-        const dataAlvo0m = new Date(agoraRef);
-        dataAlvo0m.setHours(hora, minuto, 0, 0);
-        if (dataAlvo0m.getTime() <= agoraRef.getTime()) {
-          dataAlvo0m.setDate(dataAlvo0m.getDate() + 1);
+          const dataAlvo0m = new Date(agoraRef);
+          dataAlvo0m.setHours(hora, minuto, 0, 0);
+          if (dataAlvo0m.getTime() <= agoraRef.getTime()) {
+            dataAlvo0m.setDate(dataAlvo0m.getDate() + 1);
+          }
+          await agendarNotificacaoExata(
+            `Alertas Poke Membros - ${ev.nome} (INICIOU)`,
+            `O evento ${ev.nome} começou agora!`,
+            dataAlvo0m,
+            canalUsado
+          );
         }
-        await agendarNotificacaoExata(
-          `Alertas Poke Membros - ${ev.nome} (INICIOU)`,
-          `O evento ${ev.nome} começou agora!`,
-          dataAlvo0m,
-          canalUsado
-        );
       }
     }
   };
@@ -405,20 +411,26 @@ export default function App(): React.JSX.Element {
   const abrirEdicaoEvento = (ev: EventoFixo) => {
     setEventoEmEdicao(ev);
     setEditNome(ev.nome);
-    setEditInicio(ev.inicio);
+    setEditInicio(ev.inicio.join(', '));
     setModalEditVisible(true);
   };
 
   const salvarEdicaoEvento = () => {
     if (!eventoEmEdicao) return;
-    if (!editNome.trim() || !editInicio.trim() || !editInicio.includes(':')) {
-      Alert.alert('Erro', 'Por favor informe um nome válido e o horário no formato HH:MM.');
+    if (!editNome.trim() || !editInicio.trim()) {
+      Alert.alert('Erro', 'Por favor informe um nome válido e ao menos um horário no formato HH:MM.');
+      return;
+    }
+
+    const arrayHorarios = editInicio.split(',').map((s) => s.trim()).filter((s) => s.includes(':'));
+    if (arrayHorarios.length === 0) {
+      Alert.alert('Erro', 'Informe ao menos um horário válido no formato HH:MM.');
       return;
     }
 
     const novas = eventos.map((ev) => {
       if (ev.id === eventoEmEdicao.id) {
-        return { ...ev, nome: editNome.trim(), inicio: editInicio.trim() };
+        return { ...ev, nome: editNome.trim(), inicio: arrayHorarios };
       }
       return ev;
     });
@@ -655,33 +667,48 @@ export default function App(): React.JSX.Element {
       return { status: 'HOJE NÃO', tipoEstilo: 'desativado' };
     }
 
-    const [hIni, mIni] = ev.inicio.split(':').map(Number);
-    const dataInicioHoje = new Date(agora);
-    dataInicioHoje.setHours(hIni, mIni, 0, 0);
-
-    const [hFim, mFim] = (ev.tipo === 'duracao' ? (ev.fim || ev.inicio) : ev.inicio).split(':').map(Number);
-    const dataFimHoje = new Date(agora);
-    if (ev.tipo === 'duracao') {
-      dataFimHoje.setHours(hFim, mFim, 0, 0);
-    } else {
-      dataFimHoje.setHours(hIni, mIni + 5, 0, 0);
-    }
-
     const agoraMs = agora.getTime();
 
-    if (agoraMs >= dataInicioHoje.getTime() && agoraMs < dataFimHoje.getTime()) {
-      return { status: 'Em andamento', tipoEstilo: 'emAndamento' };
+    for (const horStr of ev.inicio) {
+      const [hIni, mIni] = horStr.split(':').map(Number);
+      const dataInicioHoje = new Date(agora);
+      dataInicioHoje.setHours(hIni, mIni, 0, 0);
+
+      const [hFim, mFim] = (ev.tipo === 'duracao' ? (ev.fim || horStr) : horStr).split(':').map(Number);
+      const dataFimHoje = new Date(agora);
+      if (ev.tipo === 'duracao') {
+        dataFimHoje.setHours(hFim, mFim, 0, 0);
+      } else {
+        dataFimHoje.setHours(hIni, mIni + 5, 0, 0);
+      }
+
+      if (agoraMs >= dataInicioHoje.getTime() && agoraMs < dataFimHoje.getTime()) {
+        return { status: 'Em andamento', tipoEstilo: 'emAndamento' };
+      }
     }
 
-    if (agoraMs < dataInicioHoje.getTime()) {
-      const diffSegundos = Math.floor((dataInicioHoje.getTime() - agoraMs) / 1000);
-      return { status: `Falta ${formatarContador(diffSegundos)}`, tipoEstilo: 'pendente' };
+    let menorDiff = Infinity;
+    for (const horStr of ev.inicio) {
+      const [hIni, mIni] = horStr.split(':').map(Number);
+      const dataInicioHoje = new Date(agora);
+      dataInicioHoje.setHours(hIni, mIni, 0, 0);
+
+      if (agoraMs < dataInicioHoje.getTime()) {
+        const diff = Math.floor((dataInicioHoje.getTime() - agoraMs) / 1000);
+        if (diff < menorDiff) menorDiff = diff;
+      }
+    }
+
+    if (menorDiff !== Infinity) {
+      return { status: `Falta ${formatarContador(menorDiff)}`, tipoEstilo: 'pendente' };
     }
 
     const ehResetServidor = ev.id === '1' || ev.nome.toLowerCase().includes('reset');
     if (ehResetServidor) {
-      const dataInicioAmanha = new Date(dataInicioHoje);
+      const [hIni, mIni] = ev.inicio[0].split(':').map(Number);
+      const dataInicioAmanha = new Date(agora);
       dataInicioAmanha.setDate(dataInicioAmanha.getDate() + 1);
+      dataInicioAmanha.setHours(hIni, mIni, 0, 0);
       const diffSegundosAmanha = Math.floor((dataInicioAmanha.getTime() - agoraMs) / 1000);
       return { status: `Falta ${formatarContador(diffSegundosAmanha)}`, tipoEstilo: 'pendente' };
     }
@@ -726,6 +753,10 @@ export default function App(): React.JSX.Element {
                 badgeTextStyle = styles.badgeTextoDesativado;
               }
 
+              const textoHorarios = ev.tipo === 'duracao'
+                ? `${ev.inicio.join(', ')} - ${ev.fim}`
+                : ev.inicio.join(', ');
+
               return (
                 <View key={ev.id} style={[styles.cardTimeline, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   <View style={styles.cardTimelineInfo}>
@@ -736,7 +767,7 @@ export default function App(): React.JSX.Element {
                       </TouchableOpacity>
                     </View>
                     <Text style={[styles.cardHorario, { color: theme.subtext }]}>
-                      ⏰ {ev.tipo === 'duracao' ? `${ev.inicio} - ${ev.fim}` : ev.inicio}
+                      ⏰ {textoHorarios}
                     </Text>
                     {Boolean(ev.aviso) && (
                       <Text style={styles.cardAvisoTexto}>📢 {ev.aviso}</Text>
@@ -774,32 +805,38 @@ export default function App(): React.JSX.Element {
             </TouchableOpacity>
           </View>
 
-          {eventos.map((ev) => (
-            <View key={ev.id} style={[styles.cardToggle, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <View style={styles.cardTimelineInfo}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.cardTitulo, { color: theme.text }]}>{ev.nome}</Text>
-                  <TouchableOpacity onPress={() => abrirEdicaoEvento(ev)} style={{ marginLeft: 8, padding: 4 }}>
-                    <Text style={{ fontSize: 14 }}>✏️</Text>
-                  </TouchableOpacity>
+          {eventos.map((ev) => {
+            const textoHorarios = ev.tipo === 'duracao'
+              ? `${ev.inicio.join(', ')} às ${ev.fim}`
+              : ev.inicio.join(', ');
+
+            return (
+              <View key={ev.id} style={[styles.cardToggle, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={styles.cardTimelineInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.cardTitulo, { color: theme.text }]}>{ev.nome}</Text>
+                    <TouchableOpacity onPress={() => abrirEdicaoEvento(ev)} style={{ marginLeft: 8, padding: 4 }}>
+                      <Text style={{ fontSize: 14 }}>✏️</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={[styles.cardSub, { color: theme.subtext }]}>
+                    Horários: {textoHorarios}
+                  </Text>
+                  <Text style={styles.cardNotiInfo}>⚡ Notifica 5m, 1m antes e no início</Text>
                 </View>
-                <Text style={[styles.cardSub, { color: theme.subtext }]}>
-                  Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
-                </Text>
-                <Text style={styles.cardNotiInfo}>⚡ Notifica 5m, 1m antes e no início</Text>
+                <Switch
+                  value={ev.ativo}
+                  onValueChange={() => {
+                    const novas = eventos.map((e) => e.id === ev.id ? { ...e, ativo: !e.ativo } : e);
+                    salvarEventosFixos(novas);
+                    agendarEventosAtivos(novas);
+                  }}
+                  trackColor={{ false: '#334155', true: '#059669' }}
+                  thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
+                />
               </View>
-              <Switch
-                value={ev.ativo}
-                onValueChange={() => {
-                  const novas = eventos.map((e) => e.id === ev.id ? { ...e, ativo: !e.ativo } : e);
-                  salvarEventosFixos(novas);
-                  agendarEventosAtivos(novas);
-                }}
-                trackColor={{ false: '#334155', true: '#059669' }}
-                thumbColor={ev.ativo ? '#10B981' : '#94A3B8'}
-              />
-            </View>
-          ))}
+            );
+          })}
         </View>
       );
     }
@@ -1131,15 +1168,13 @@ export default function App(): React.JSX.Element {
               placeholderTextColor="#64748B"
             />
 
-            <Text style={[styles.inputLabel, { color: theme.subtext }]}>Horário de Início (HH:MM):</Text>
+            <Text style={[styles.inputLabel, { color: theme.subtext }]}>Horários de Início (separados por vírgula):</Text>
             <TextInput
               style={[styles.inputCustom, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.inputBorder }]}
               value={editInicio}
-              onChangeText={(val) => setEditInicio(formatarEntradaHora(val))}
-              placeholder="Ex: 16:00"
+              onChangeText={setEditInicio}
+              placeholder="Ex: 09:00, 10:00, 16:00"
               placeholderTextColor="#64748B"
-              keyboardType="numeric"
-              maxLength={5}
             />
 
             <View style={styles.modalBotoesRow}>
