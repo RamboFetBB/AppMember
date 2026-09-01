@@ -21,7 +21,6 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
-import * as Sharing from 'expo-sharing';
 
 interface EventoFixo {
   id: string;
@@ -261,21 +260,14 @@ export default function App(): React.JSX.Element {
         throw new Error('Falha no download do arquivo.');
       }
 
-      setStatusUpdate('🟢 Download concluído!');
+      setStatusUpdate('🟢 Download concluído! Abrindo instalador...');
 
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(result.uri, {
-          dialogTitle: 'Salvar ou Instalar o APK',
-          mimeType: 'application/vnd.android.package-archive',
-        });
-      } else {
-        const contentUri = await FileSystem.getContentUriAsync(result.uri);
-        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-          data: contentUri,
-          type: 'application/vnd.android.package-archive',
-          flags: 1,
-        });
-      }
+      const contentUri = await FileSystem.getContentUriAsync(result.uri);
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        type: 'application/vnd.android.package-archive',
+        flags: 1,
+      });
 
     } catch (e: any) {
       console.log('Erro ao buscar/instalar APK:', e);
