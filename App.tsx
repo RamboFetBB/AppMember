@@ -190,7 +190,6 @@ export default function App(): React.JSX.Element {
       setStatusUpdate('🟢 Download concluído! Abrindo instalador...');
       const contentUri = await FileSystem.getContentUriAsync(result.uri);
 
-      // Tenta abrir o instalador do Android com tratamento de exceção de permissão
       try {
         await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
           data: contentUri,
@@ -1287,7 +1286,7 @@ const styles = StyleSheet.create({
   },
   rowSystemControl: {
     flexDirection: 'row',
-    justify.content: 'space-between',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 6
   },
