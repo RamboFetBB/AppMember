@@ -780,7 +780,7 @@ export default function App(): React.JSX.Element {
           <View style={styles.formCustomBox}>
             <TextInput
               style={styles.inputCustom}
-              placeholder="Nome do Evento (ex: Guerra de Castelo)"
+              placeholder="Nome do Evento (ex: Floresta Rica)"
               placeholderTextColor="#64748B"
               value={novoNome}
               onChangeText={setNovoNome}
