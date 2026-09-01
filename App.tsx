@@ -125,6 +125,15 @@ export default function App(): React.JSX.Element {
     return () => clearInterval(timer);
   }, []);
 
+  const formatarEntradaHora = (text: string): string => {
+    const apenasNumeros = text.replace(/\D/g, '');
+    const limpo = apenasNumeros.slice(0, 4);
+    if (limpo.length > 2) {
+      return `${limpo.slice(0, 2)}:${limpo.slice(2)}`;
+    }
+    return limpo;
+  };
+
   const checarAtualizacoesOTA = async () => {
     if (__DEV__) {
       setStatusOTA('⚠️ Atualizações OTA desativadas no modo Expo Go / DEV.');
@@ -409,7 +418,6 @@ export default function App(): React.JSX.Element {
     const canalUsado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
     let novosCooldowns = { ...cooldowns };
 
-    // Processar Cooldown de 1h01m
     const key1h = `${slot}_1h`;
     if (novosCooldowns[key1h]?.notifId) {
       await cancelarNotificacao(novosCooldowns[key1h].notifId);
@@ -433,7 +441,6 @@ export default function App(): React.JSX.Element {
       novosCooldowns[key1h] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
     }
 
-    // Processar Cooldown de 24h
     const key24h = `${slot}_24h`;
     if (novosCooldowns[key24h]?.notifId) {
       await cancelarNotificacao(novosCooldowns[key24h].notifId);
@@ -705,14 +712,17 @@ export default function App(): React.JSX.Element {
               <View key={slot} style={styles.cardSystemSlot}>
                 <Text style={styles.cardTitulo}>Slot {slot}</Text>
 
-                {/* Entrada Manual e Cronômetro Retroativo */}
+                {/* Entrada Manual e Cronômetro Retroativo com Máscara de Horário */}
                 <View style={styles.rowManualInput}>
                   <TextInput
                     style={styles.inputManual}
-                    placeholder="Entrou às (Ex: 14:30)"
+                    placeholder="Ex: 1430 (14:30)"
                     placeholderTextColor="#64748B"
                     value={horariosManuais[slot] || ''}
-                    onChangeText={(val) => setHorariosManuais((prev) => ({ ...prev, [slot]: val }))}
+                    onChangeText={(val) => {
+                      const textoFormatado = formatarEntradaHora(val);
+                      setHorariosManuais((prev) => ({ ...prev, [slot]: textoFormatado }));
+                    }}
                     keyboardType="numeric"
                     maxLength={5}
                   />
@@ -740,7 +750,7 @@ export default function App(): React.JSX.Element {
                   />
                 </View>
 
-                {/* Cooldown 24h (Disponível para todos os slots) */}
+                {/* Cooldown 24h */}
                 <View style={styles.rowSystemControlDivider}>
                   <View style={styles.cardTimelineInfo}>
                     <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
@@ -777,10 +787,12 @@ export default function App(): React.JSX.Element {
             />
             <TextInput
               style={styles.inputCustom}
-              placeholder="Horário exato (ex: 20:30)"
+              placeholder="Horário exato (ex: 2030 vira 20:30)"
               placeholderTextColor="#64748B"
               value={novoHorario}
-              onChangeText={setNovoHorario}
+              onChangeText={(val) => setNovoHorario(formatarEntradaHora(val))}
+              keyboardType="numeric"
+              maxLength={5}
             />
             <TouchableOpacity style={styles.btnAdicionarCustom} onPress={adicionarEventoCustom}>
               <Text style={styles.btnAcaoTexto}>➕ Adicionar Alerta</Text>
