@@ -80,6 +80,7 @@ export default function App(): React.JSX.Element {
   const [novoNome, setNovoNome] = useState<string>('');
   const [novoHorario, setNovoHorario] = useState<string>('');
   const [modoDndAtivo, setModoDndAtivo] = useState<boolean>(true);
+  const [horariosManuais, setHorariosManuais] = useState<Record<string, string>>({});
 
   // Estados do Controle de Atualização OTA
   const [statusOTA, setStatusOTA] = useState<string>('Nenhuma verificação realizada');
@@ -281,7 +282,6 @@ export default function App(): React.JSX.Element {
         const hora = parseInt(hStr, 10);
         const minuto = parseInt(mStr, 10);
 
-        // Alerta 1: 5 Minutos Antes
         const dataAlvo5m = new Date(agoraRef);
         dataAlvo5m.setHours(hora, minuto - 5, 0, 0);
         if (dataAlvo5m.getTime() <= agoraRef.getTime()) {
@@ -295,7 +295,6 @@ export default function App(): React.JSX.Element {
           canalUsado
         );
 
-        // Alerta 2: 1 Minuto Antes
         const dataAlvo1m = new Date(agoraRef);
         dataAlvo1m.setHours(hora, minuto - 1, 0, 0);
         if (dataAlvo1m.getTime() <= agoraRef.getTime()) {
@@ -335,7 +334,7 @@ export default function App(): React.JSX.Element {
       const canalUsado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
       const notifId = await agendarNotificacaoExata(
         'Alertas Poke Membros - Guilda',
-        'Você já pode se juntar à próxima guilda!',
+        `Você já pode se juntar à próxima guilda! (${slot})`,
         dataAlvo,
         canalUsado
       );
@@ -365,7 +364,7 @@ export default function App(): React.JSX.Element {
       const canalUsado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
       const notifId = await agendarNotificacaoExata(
         'Alertas Poke Membros - Alerta 24h',
-        'Já se passaram 24h desde a última guilda.',
+        `Chegou as 24h do dia anterior da guilda ${slot}`,
         dataAlvo,
         canalUsado
       );
@@ -376,6 +375,90 @@ export default function App(): React.JSX.Element {
       };
       salvarCooldowns(novos);
     }
+  };
+
+  const aplicarHorarioManual = async (slot: string): Promise<void> => {
+    const hor = horariosManuais[slot];
+    if (!hor || !hor.includes(':')) {
+      Alert.alert('Atenção', 'Informe o horário no formato correto HH:MM (ex: 14:30)');
+      return;
+    }
+
+    const partes = hor.trim().split(':');
+    const h = parseInt(partes[0], 10);
+    const m = parseInt(partes[1], 10);
+
+    if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+      Alert.alert('Atenção', 'Horário inválido. Digite um horário entre 00:00 e 23:59.');
+      return;
+    }
+
+    const agoraRef = new Date();
+    let dataEntrada = new Date(agoraRef);
+    dataEntrada.setHours(h, m, 0, 0);
+
+    if (dataEntrada.getTime() > agoraRef.getTime()) {
+      dataEntrada.setDate(dataEntrada.getDate() - 1);
+    }
+
+    const entradaMs = dataEntrada.getTime();
+    const fim1hMs = entradaMs + COOLDOWN_1H01 * 1000;
+    const fim24hMs = entradaMs + COOLDOWN_24H * 1000;
+    const agoraMs = Date.now();
+
+    const canalUsado = modoDndAtivo ? 'channel_critical_alerts' : 'default';
+    let novosCooldowns = { ...cooldowns };
+
+    // Processar Cooldown de 1h01m
+    const key1h = `${slot}_1h`;
+    if (novosCooldowns[key1h]?.notifId) {
+      await cancelarNotificacao(novosCooldowns[key1h].notifId);
+    }
+
+    if (fim1hMs > agoraMs) {
+      const restante1h = Math.ceil((fim1hMs - agoraMs) / 1000);
+      const notifId1h = await agendarNotificacaoExata(
+        'Alertas Poke Membros - Guilda',
+        `Você já pode se juntar à próxima guilda! (${slot})`,
+        new Date(fim1hMs),
+        canalUsado
+      );
+      novosCooldowns[key1h] = {
+        ativo: true,
+        fimTimestamp: fim1hMs,
+        tempoRestante: restante1h,
+        notifId: notifId1h,
+      };
+    } else {
+      novosCooldowns[key1h] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
+    }
+
+    // Processar Cooldown de 24h
+    const key24h = `${slot}_24h`;
+    if (novosCooldowns[key24h]?.notifId) {
+      await cancelarNotificacao(novosCooldowns[key24h].notifId);
+    }
+
+    if (fim24hMs > agoraMs) {
+      const restante24h = Math.ceil((fim24hMs - agoraMs) / 1000);
+      const notifId24h = await agendarNotificacaoExata(
+        'Alertas Poke Membros - Alerta 24h',
+        `Chegou as 24h do dia anterior da guilda ${slot}`,
+        new Date(fim24hMs),
+        canalUsado
+      );
+      novosCooldowns[key24h] = {
+        ativo: true,
+        fimTimestamp: fim24hMs,
+        tempoRestante: restante24h,
+        notifId: notifId24h,
+      };
+    } else {
+      novosCooldowns[key24h] = { ativo: false, fimTimestamp: 0, tempoRestante: 0, notifId: null };
+    }
+
+    salvarCooldowns(novosCooldowns);
+    Alert.alert('Sucesso', `Cronômetro retroativo atualizado para o slot ${slot}!`);
   };
 
   const adicionarEventoCustom = async (): Promise<void> => {
@@ -611,11 +694,10 @@ export default function App(): React.JSX.Element {
         <View>
           <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
           <Text style={styles.subTituloInstrucao}>
-            Slots final 1 possuem o controle adicional de 24h.
+            Insira o horário de entrada manual para calcular o tempo retroativo ou ative os alertas diretamente.
           </Text>
 
           {DIAS_SLOTS.map((slot) => {
-            const ehFinal1 = slot.endsWith('1');
             const info1h = cooldowns[`${slot}_1h`] || { ativo: false, tempoRestante: 0 };
             const info24h = cooldowns[`${slot}_24h`] || { ativo: false, tempoRestante: 0 };
 
@@ -623,6 +705,26 @@ export default function App(): React.JSX.Element {
               <View key={slot} style={styles.cardSystemSlot}>
                 <Text style={styles.cardTitulo}>Slot {slot}</Text>
 
+                {/* Entrada Manual e Cronômetro Retroativo */}
+                <View style={styles.rowManualInput}>
+                  <TextInput
+                    style={styles.inputManual}
+                    placeholder="Entrou às (Ex: 14:30)"
+                    placeholderTextColor="#64748B"
+                    value={horariosManuais[slot] || ''}
+                    onChangeText={(val) => setHorariosManuais((prev) => ({ ...prev, [slot]: val }))}
+                    keyboardType="numeric"
+                    maxLength={5}
+                  />
+                  <TouchableOpacity
+                    style={styles.btnManual}
+                    onPress={() => aplicarHorarioManual(slot)}
+                  >
+                    <Text style={styles.btnManualTexto}>⏱️ Retroativo</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Cooldown 1h01m */}
                 <View style={styles.rowSystemControl}>
                   <View style={styles.cardTimelineInfo}>
                     <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
@@ -638,22 +740,21 @@ export default function App(): React.JSX.Element {
                   />
                 </View>
 
-                {ehFinal1 && (
-                  <View style={styles.rowSystemControlDivider}>
-                    <View style={styles.cardTimelineInfo}>
-                      <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
-                      <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
-                        {info24h.ativo ? `⌛ ${formatarTempo(info24h.tempoRestante)}` : 'Inativo'}
-                      </Text>
-                    </View>
-                    <Switch
-                      value={Boolean(info24h.ativo)}
-                      onValueChange={() => alternarCooldown24h(slot)}
-                      trackColor={{ false: '#334155', true: '#D97706' }}
-                      thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
-                    />
+                {/* Cooldown 24h (Disponível para todos os slots) */}
+                <View style={styles.rowSystemControlDivider}>
+                  <View style={styles.cardTimelineInfo}>
+                    <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
+                    <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
+                      {info24h.ativo ? `⌛ ${formatarTempo(info24h.tempoRestante)}` : 'Inativo'}
+                    </Text>
                   </View>
-                )}
+                  <Switch
+                    value={Boolean(info24h.ativo)}
+                    onValueChange={() => alternarCooldown24h(slot)}
+                    trackColor={{ false: '#334155', true: '#D97706' }}
+                    thumbColor={info24h.ativo ? '#F59E0B' : '#94A3B8'}
+                  />
+                </View>
               </View>
             );
           })}
@@ -1092,6 +1193,35 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#2A365C'
+  },
+  rowManualInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8
+  },
+  inputManual: {
+    flex: 1,
+    backgroundColor: '#0B132B',
+    color: '#FFFFFF',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginRight: 8
+  },
+  btnManual: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6
+  },
+  btnManualTexto: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold'
   },
   rowSystemControl: {
     flexDirection: 'row',
