@@ -89,18 +89,15 @@ export default function App(): React.JSX.Element {
   const [modoDndAtivo, setModoDndAtivo] = useState<boolean>(true);
   const [horariosManuais, setHorariosManuais] = useState<Record<string, string>>({});
 
-  // Estado para Edição do Evento Fixo (Modal)
   const [modalEditVisible, setModalEditVisible] = useState<boolean>(false);
   const [eventoEmEdicao, setEventoEmEdicao] = useState<EventoFixo | null>(null);
   const [editNome, setEditNome] = useState<string>('');
   const [editInicio, setEditInicio] = useState<string>('');
 
-  // Estados de Atualização
   const [statusUpdate, setStatusUpdate] = useState<string>('Nenhuma verificação realizada');
   const [loadingUpdate, setLoadingUpdate] = useState<boolean>(false);
   const [releaseDataHora, setReleaseDataHora] = useState<string | null>(null);
 
-  // Esquema Dinâmico de Cores (Dark / Light)
   const theme = {
     bg: isDarkMode ? '#0B132B' : '#F1F5F9',
     card: isDarkMode ? '#1C2541' : '#FFFFFF',
@@ -173,7 +170,7 @@ export default function App(): React.JSX.Element {
         listaFixos = JSON.parse(savedEventos);
       }
       setEventos(listaFixos);
-      agendarEventosAtivos(listaFixos); // Garante o re-agendamento ao abrir o app
+      agendarEventosAtivos(listaFixos);
 
       if (savedCustom) setEventosCustom(JSON.parse(savedCustom));
 
@@ -241,7 +238,12 @@ export default function App(): React.JSX.Element {
 
       setStatusUpdate('Baixando APK (0%)...');
       const apkUrl = apkAsset.browser_download_url;
-      const fileUri = `${FileSystem.documentDirectory}update.apk`;
+      const fileUri = `${FileSystem.cacheDirectory}update.apk`;
+
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+      }
 
       const downloadResumable = FileSystem.createDownloadResumable(
         apkUrl,
@@ -271,7 +273,7 @@ export default function App(): React.JSX.Element {
 
     } catch (e: any) {
       console.log('Erro ao buscar/instalar APK:', e);
-      setStatusUpdate('❌ Erro ao buscar ou instalar o APK.');
+      setStatusUpdate(`❌ Erro: ${e.message || 'Falha ao processar APK'}`);
     } finally {
       setLoadingUpdate(false);
     }
@@ -361,7 +363,6 @@ export default function App(): React.JSX.Element {
         const hora = parseInt(hStr, 10);
         const minuto = parseInt(mStr, 10);
 
-        // 5 MINUTOS ANTES
         const dataAlvo5m = new Date(agoraRef);
         dataAlvo5m.setHours(hora, minuto - 5, 0, 0);
         if (dataAlvo5m.getTime() <= agoraRef.getTime()) {
@@ -374,7 +375,6 @@ export default function App(): React.JSX.Element {
           canalUsado
         );
 
-        // 1 MINUTO ANTES
         const dataAlvo1m = new Date(agoraRef);
         dataAlvo1m.setHours(hora, minuto - 1, 0, 0);
         if (dataAlvo1m.getTime() <= agoraRef.getTime()) {
@@ -387,7 +387,6 @@ export default function App(): React.JSX.Element {
           canalUsado
         );
 
-        // EXATO MOMENTO (0m)
         const dataAlvo0m = new Date(agoraRef);
         dataAlvo0m.setHours(hora, minuto, 0, 0);
         if (dataAlvo0m.getTime() <= agoraRef.getTime()) {
@@ -1113,7 +1112,6 @@ export default function App(): React.JSX.Element {
         )}
       </ScrollView>
 
-      {/* Modal de Edição de Evento Fixo */}
       <Modal
         visible={modalEditVisible}
         transparent={true}
@@ -1163,7 +1161,6 @@ export default function App(): React.JSX.Element {
         </View>
       </Modal>
 
-      {/* Navegação Inferior */}
       <View style={[styles.navBottom, { backgroundColor: theme.header, borderTopColor: theme.border }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('gerador')}>
           <Text style={styles.navIcon}>⚡</Text>
