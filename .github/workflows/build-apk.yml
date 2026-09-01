@@ -32,6 +32,7 @@ jobs:
         run: npx expo prebuild --platform android
         env:
           NODE_ENV: production
+          EXPO_UPDATE_CHANNEL: main
 
       - name: Build Android Release APK
         run: |
@@ -41,6 +42,7 @@ jobs:
         env:
           NODE_ENV: production
           EXPO_DEVTOOL_ENV: production
+          EXPO_UPDATE_CHANNEL: main
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m"
 
       - name: Upload APK Artifact
