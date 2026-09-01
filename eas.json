@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 12.0.0"
+    "version": ">= 10.0.0"
   },
   "build": {
     "preview": {
@@ -8,8 +8,5 @@
         "buildType": "apk"
       }
     }
-  },
-  "update": {
-    "channel": "main"
   }
 }
