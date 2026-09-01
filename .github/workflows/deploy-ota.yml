@@ -27,4 +27,4 @@ jobs:
       - name: 🚀 Lançar Patch OTA
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas update --auto --non-interactive
+        run: eas update --branch main --message "Update automático via GitHub" --non-interactive
