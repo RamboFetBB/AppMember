@@ -1,60 +1,34 @@
 {
   "expo": {
-    "name": "Alertas Poke_membros",
-    "slug": "rambofetbb",
-    "owner": "rambofets-team",
+    "name": "Alertas Poke Membros",
+    "slug": "pokemembros-app",
     "version": "1.0.0",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#0b1329"
     },
-    "updates": {
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/b302fe78-c331-4002-be08-ed63a2f36460",
-      "requestHeaders": {
-        "expo-channel-name": "main"
-      }
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.pokemembros.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0F172A"
+        "backgroundColor": "#0b1329"
       },
-      "package": "com.pokemembros.app",
       "permissions": [
-        "RECEIVE_BOOT_COMPLETED",
+        "REQUEST_INSTALL_PACKAGES",
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
-        "VIBRATE"
+        "POST_NOTIFICATIONS"
       ]
     },
-    "plugins": [
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/adaptive-icon.png",
-          "color": "#2563EB"
-        }
-      ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "b302fe78-c331-4002-be08-ed63a2f36460"
-      }
+    "web": {
+      "favicon": "./assets/favicon.png"
     }
   }
 }
