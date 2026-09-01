@@ -156,7 +156,7 @@ export default function App(): React.JSX.Element {
         setStatusOTA('🟢 Atualização baixada! Reinicie o aplicativo.');
 
         Alert.alert(
-          '🚀 Patch Baixado!',
+          '🚀 Patch Baixado!!',
           'A nova versão foi baixada com sucesso. Deseja reiniciar para aplicar as mudanças agora?',
           [
             { text: 'Mais tarde', style: 'cancel' },
