@@ -3,6 +3,9 @@ name: Build APK - Alertas Poke_membros
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,7 +35,6 @@ jobs:
         run: npx expo prebuild --platform android
         env:
           NODE_ENV: production
-          EXPO_UPDATE_CHANNEL: main
 
       - name: Build Android Release APK
         run: |
@@ -42,7 +44,6 @@ jobs:
         env:
           NODE_ENV: production
           EXPO_DEVTOOL_ENV: production
-          EXPO_UPDATE_CHANNEL: main
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m"
 
       - name: Upload APK Artifact
@@ -50,3 +51,14 @@ jobs:
         with:
           name: Alertas-PokeMembros-APK
           path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Versão 1.0.${{ github.run_number }}
+          draft: false
+          prerelease: false
+          files: android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
