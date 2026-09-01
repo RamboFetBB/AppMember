@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Updates from 'expo-updates';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 interface EventoFixo {
   id: string;
@@ -82,16 +83,15 @@ export default function App(): React.JSX.Element {
   const [modoDndAtivo, setModoDndAtivo] = useState<boolean>(true);
   const [horariosManuais, setHorariosManuais] = useState<Record<string, string>>({});
 
-  // Estados do Controle de Atualização OTA
-  const [statusOTA, setStatusOTA] = useState<string>('Nenhuma verificação realizada');
-  const [lastCheckOTA, setLastCheckOTA] = useState<string | null>(null);
-  const [loadingOTA, setLoadingOTA] = useState<boolean>(false);
-  const [isPendingOTA, setIsPendingOTA] = useState<boolean>(false);
+  // Estados do Controle de Atualização via GitHub APK
+  const [statusUpdate, setStatusUpdate] = useState<string>('Nenhuma verificação realizada');
+  const [loadingUpdate, setLoadingUpdate] = useState<boolean>(false);
+  const [releaseDataHora, setReleaseDataHora] = useState<string | null>(null);
 
   useEffect(() => {
     configurarNotificacoes();
     carregarDados();
-    checarAtualizacoesOTA();
+    checarEInstalarAPK(true); // Apenas busca as informações da release ao iniciar
 
     const timer = setInterval(() => {
       const agoraAtual = new Date();
@@ -134,43 +134,75 @@ export default function App(): React.JSX.Element {
     return limpo;
   };
 
-  const checarAtualizacoesOTA = async () => {
-    if (__DEV__) {
-      setStatusOTA('⚠️ Atualizações OTA desativadas no modo Expo Go / DEV.');
-      return;
-    }
-
-    setLoadingOTA(true);
-    setStatusOTA('Verificando atualizações no servidor...');
+  const checarEInstalarAPK = async (somenteChecar: boolean = false) => {
+    setLoadingUpdate(true);
+    setStatusUpdate('Verificando última versão no GitHub...');
 
     try {
-      const update = await Updates.checkForUpdateAsync();
-      const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      setLastCheckOTA(horaAtual);
-
-      if (update.isAvailable) {
-        setStatusOTA('Baixando nova versão...');
-        await Updates.fetchUpdateAsync();
-        
-        setIsPendingOTA(true);
-        setStatusOTA('🟢 Atualização baixada! Reinicie o aplicativo.');
-
-        Alert.alert(
-          '🚀 Patch Baixado!!',
-          'A nova versão foi baixada com sucesso. Deseja reiniciar para aplicar as mudanças agora?',
-          [
-            { text: 'Mais tarde', style: 'cancel' },
-            { text: 'Reiniciar Agora', onPress: () => Updates.reloadAsync() }
-          ]
-        );
-      } else {
-        setStatusOTA('✅ Você já está na versão mais recente.');
+      const response = await fetch('https://api.github.com/repos/rambofetbb/AppMember/releases/latest');
+      if (!response.ok) {
+        throw new Error('Não foi possível conectar ao GitHub Releases.');
       }
-    } catch (e) {
-      console.log('Erro ao checar atualizações OTA:', e);
-      setStatusOTA('❌ Erro ao buscar atualização (Verifique a conexão).');
+
+      const data = await response.json();
+
+      // Formatar Data e Hora da Release
+      if (data.published_at) {
+        const dateObj = new Date(data.published_at);
+        const dataFormatada = dateObj.toLocaleDateString('pt-BR');
+        const horaFormatada = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        setReleaseDataHora(`${dataFormatada} às ${horaFormatada}`);
+      }
+
+      const apkAsset = data.assets?.find((asset: any) => asset.name.endsWith('.apk'));
+      if (!apkAsset) {
+        setStatusUpdate('⚠️ Nenhum APK foi encontrado na última release.');
+        setLoadingUpdate(false);
+        return;
+      }
+
+      if (somenteChecar) {
+        setStatusUpdate('✅ Última release encontrada no GitHub.');
+        setLoadingUpdate(false);
+        return;
+      }
+
+      // Iniciar o Download
+      setStatusUpdate('Baixando APK (0%)...');
+      const apkUrl = apkAsset.browser_download_url;
+      const fileUri = `${FileSystem.documentDirectory}update.apk`;
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        apkUrl,
+        fileUri,
+        {},
+        (downloadProgress) => {
+          const progress = Math.round(
+            (downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100
+          );
+          setStatusUpdate(`Baixando APK: ${progress}%`);
+        }
+      );
+
+      const result = await downloadResumable.downloadAsync();
+      if (!result || !result.uri) {
+        throw new Error('Falha no download do arquivo.');
+      }
+
+      setStatusUpdate('🟢 Download concluído! Abrindo instalador...');
+      const contentUri = await FileSystem.getContentUriAsync(result.uri);
+
+      // Abrir instalador do Android
+      await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
+        data: contentUri,
+        flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+      });
+
+    } catch (e: any) {
+      console.log('Erro ao buscar/instalar APK:', e);
+      setStatusUpdate('❌ Erro ao buscar ou instalar o APK.');
     } finally {
-      setLoadingOTA(false);
+      setLoadingUpdate(false);
     }
   };
 
@@ -712,7 +744,6 @@ export default function App(): React.JSX.Element {
               <View key={slot} style={styles.cardSystemSlot}>
                 <Text style={styles.cardTitulo}>Slot {slot}</Text>
 
-                {/* Entrada Manual e Cronômetro Retroativo com Máscara de Horário */}
                 <View style={styles.rowManualInput}>
                   <TextInput
                     style={styles.inputManual}
@@ -734,7 +765,6 @@ export default function App(): React.JSX.Element {
                   </TouchableOpacity>
                 </View>
 
-                {/* Cooldown 1h01m */}
                 <View style={styles.rowSystemControl}>
                   <View style={styles.cardTimelineInfo}>
                     <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
@@ -750,7 +780,6 @@ export default function App(): React.JSX.Element {
                   />
                 </View>
 
-                {/* Cooldown 24h */}
                 <View style={styles.rowSystemControlDivider}>
                   <View style={styles.cardTimelineInfo}>
                     <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
@@ -874,35 +903,35 @@ export default function App(): React.JSX.Element {
             <Text style={styles.painelTitulo}>⚙️ Modos & Testes Dev</Text>
 
             <View style={styles.cardSystemSlot}>
-              <Text style={styles.cardTitulo}>Atualizações Over-The-Air (OTA)</Text>
+              <Text style={styles.cardTitulo}>Atualização do App (GitHub Release)</Text>
               <Text style={styles.cardSubLabel}>
-                Verifique manualmente por atualizações de patch lançadas.
+                Baixa e instala o arquivo APK completo publicado na aba Releases do seu repositório.
               </Text>
 
               <TouchableOpacity
                 style={[
                   styles.btnAdicionarCustom,
-                  { marginTop: 10, backgroundColor: isPendingOTA ? '#D97706' : '#059669' }
+                  { marginTop: 10, backgroundColor: '#059669' }
                 ]}
-                onPress={isPendingOTA ? () => Updates.reloadAsync() : checarAtualizacoesOTA}
-                disabled={loadingOTA}
+                onPress={() => checarEInstalarAPK(false)}
+                disabled={loadingUpdate}
               >
-                {loadingOTA ? (
+                {loadingUpdate ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (
-                  <Text style={styles.btnAcaoTexto}>
-                    {isPendingOTA ? '🔄 Reiniciar para Aplicar Patch' : '🔄 Buscar Patches Agora'}
-                  </Text>
+                  <Text style={styles.btnAcaoTexto}>🚀 Baixar e Instalar Último APK</Text>
                 )}
               </TouchableOpacity>
 
+              {/* EXIBIÇÃO DA DATA E HORA DA ÚLTIMA RELEASE DISPONÍVEL */}
               <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#2A365C' }}>
                 <Text style={{ color: '#E2E8F0', fontSize: 12, fontWeight: '500' }}>
-                  {statusOTA}
+                  {statusUpdate}
                 </Text>
-                {lastCheckOTA && (
-                  <Text style={{ color: '#64748B', fontSize: 11, marginTop: 2 }}>
-                    Última verificação: {lastCheckOTA}
+
+                {releaseDataHora && (
+                  <Text style={{ color: '#38BDF8', fontSize: 12, marginTop: 4, fontWeight: '600' }}>
+                    📅 Lançamento do APK disponível: {releaseDataHora}
                   </Text>
                 )}
               </View>
