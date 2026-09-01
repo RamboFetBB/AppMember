@@ -13,6 +13,7 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
+  Modal,
   ViewStyle,
   TextStyle
 } from 'react-native';
@@ -20,12 +21,13 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as Sharing from 'expo-sharing';
 
 interface EventoFixo {
   id: string;
   nome: string;
   inicio: string;
-  fim: string;
+  fim?: string;
   tipo: 'ponto' | 'duracao';
   ativo: boolean;
   dias: number[];
@@ -58,9 +60,11 @@ const EVENTOS_FIXOS_INICIAIS: EventoFixo[] = [
   { id: '1', nome: 'Reset Servidor', inicio: '01:00', fim: '01:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
   { id: '2', nome: 'Interserver Duplo', inicio: '07:00', fim: '11:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
   { id: '3', nome: 'Transporte Duplo', inicio: '09:00', fim: '10:00', tipo: 'duracao', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '4', nome: 'GuildasXGuildas', inicio: '15:30', fim: '15:35', tipo: 'ponto', ativo: true, dias: [6], aviso: 'A GvG ira iniciar em breve!' },
+  { id: '4', nome: 'GvG (GuildasXGuildas)', inicio: '15:30', fim: '15:35', tipo: 'ponto', ativo: true, dias: [6], aviso: 'A GvG ira iniciar em breve!' },
   { id: '5', nome: 'Boss', inicio: '16:00', fim: '16:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
-  { id: '6', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] }
+  { id: '6', nome: 'Riot', inicio: '17:00', fim: '17:05', tipo: 'ponto', ativo: true, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '7', nome: 'Evento Fixo Extra 1', inicio: '20:00', fim: '20:05', tipo: 'ponto', ativo: false, dias: [0, 1, 2, 3, 4, 5, 6] },
+  { id: '8', nome: 'Evento Fixo Extra 2', inicio: '21:00', fim: '21:05', tipo: 'ponto', ativo: false, dias: [0, 1, 2, 3, 4, 5, 6] }
 ];
 
 const DIAS_SLOTS: string[] = [
@@ -74,6 +78,9 @@ const COOLDOWN_24H = 86400;
 export default function App(): React.JSX.Element {
   const [abaInferior, setAbaInferior] = useState<string>('gerador');
   const [subAba, setSubAba] = useState<string>('fixos');
+  const [subAbaDev, setSubAbaDev] = useState<string>('geral');
+  
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [eventos, setEventos] = useState<EventoFixo[]>(EVENTOS_FIXOS_INICIAIS);
   const [agora, setAgora] = useState<Date>(new Date());
   const [cooldowns, setCooldowns] = useState<Record<string, CooldownState>>({});
@@ -83,10 +90,29 @@ export default function App(): React.JSX.Element {
   const [modoDndAtivo, setModoDndAtivo] = useState<boolean>(true);
   const [horariosManuais, setHorariosManuais] = useState<Record<string, string>>({});
 
-  // Estados do Controle de Atualização via GitHub APK
+  // Estado para Edição do Evento Fixo (Modal)
+  const [modalEditVisible, setModalEditVisible] = useState<boolean>(false);
+  const [eventoEmEdicao, setEventoEmEdicao] = useState<EventoFixo | null>(null);
+  const [editNome, setEditNome] = useState<string>('');
+  const [editInicio, setEditInicio] = useState<string>('');
+
+  // Estados de Atualização
   const [statusUpdate, setStatusUpdate] = useState<string>('Nenhuma verificação realizada');
   const [loadingUpdate, setLoadingUpdate] = useState<boolean>(false);
   const [releaseDataHora, setReleaseDataHora] = useState<string | null>(null);
+
+  // Esquema Dinâmico de Cores (Dark / Light)
+  const theme = {
+    bg: isDarkMode ? '#0B132B' : '#F1F5F9',
+    card: isDarkMode ? '#1C2541' : '#FFFFFF',
+    panel: isDarkMode ? '#111C38' : '#E2E8F0',
+    text: isDarkMode ? '#FFFFFF' : '#0F172A',
+    subtext: isDarkMode ? '#94A3B8' : '#475569',
+    border: isDarkMode ? '#2A365C' : '#CBD5E1',
+    header: isDarkMode ? '#1C2541' : '#FFFFFF',
+    inputBg: isDarkMode ? '#0B132B' : '#F8FAFC',
+    inputBorder: isDarkMode ? '#334155' : '#94A3B8'
+  };
 
   useEffect(() => {
     configurarNotificacoes();
@@ -132,6 +158,54 @@ export default function App(): React.JSX.Element {
       return `${limpo.slice(0, 2)}:${limpo.slice(2)}`;
     }
     return limpo;
+  };
+
+  const carregarDados = async () => {
+    try {
+      const savedTheme = await AsyncStorage.getItem('@theme_dark');
+      if (savedTheme !== null) setIsDarkMode(JSON.parse(savedTheme));
+
+      const savedEventos = await AsyncStorage.getItem('@eventos_fixos');
+      const savedCustom = await AsyncStorage.getItem('@eventos_custom');
+      const savedCooldowns = await AsyncStorage.getItem('@cooldowns_state');
+
+      let listaFixos = EVENTOS_FIXOS_INICIAIS;
+      if (savedEventos) {
+        listaFixos = JSON.parse(savedEventos);
+      }
+      setEventos(listaFixos);
+      agendarEventosAtivos(listaFixos); // Garante o re-agendamento ao abrir o app
+
+      if (savedCustom) setEventosCustom(JSON.parse(savedCustom));
+
+      if (savedCooldowns) {
+        const parsed: Record<string, CooldownState> = JSON.parse(savedCooldowns);
+        const agoraMs = Date.now();
+        const revalidados: Record<string, CooldownState> = {};
+
+        Object.keys(parsed).forEach((key) => {
+          const item = parsed[key];
+          if (item && item.ativo) {
+            const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
+            revalidados[key] = {
+              ...item,
+              ativo: restante > 0,
+              tempoRestante: restante
+            };
+          }
+        });
+
+        setCooldowns(revalidados);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar dados locais:', e);
+    }
+  };
+
+  const alternarTema = async () => {
+    const novoModo = !isDarkMode;
+    setIsDarkMode(novoModo);
+    await AsyncStorage.setItem('@theme_dark', JSON.stringify(novoModo));
   };
 
   const checarEInstalarAPK = async (somenteChecar: boolean = false) => {
@@ -187,23 +261,20 @@ export default function App(): React.JSX.Element {
         throw new Error('Falha no download do arquivo.');
       }
 
-      setStatusUpdate('🟢 Download concluído! Abrindo instalador...');
-      const contentUri = await FileSystem.getContentUriAsync(result.uri);
+      setStatusUpdate('🟢 Download concluído!');
 
-      try {
-        await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
-          data: contentUri,
-          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, {
+          dialogTitle: 'Salvar ou Instalar o APK',
+          mimeType: 'application/vnd.android.package-archive',
         });
-      } catch (e) {
-        Alert.alert(
-          'Permissão Requerida',
-          'Conceda a permissão de "Instalar apps desconhecidos" para o aplicativo nas configurações do seu Android.',
-          [
-            { text: 'Abrir Configurações', onPress: () => Linking.openSettings() },
-            { text: 'Cancelar', style: 'cancel' }
-          ]
-        );
+      } else {
+        const contentUri = await FileSystem.getContentUriAsync(result.uri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          type: 'application/vnd.android.package-archive',
+          flags: 1,
+        });
       }
 
     } catch (e: any) {
@@ -211,39 +282,6 @@ export default function App(): React.JSX.Element {
       setStatusUpdate('❌ Erro ao buscar ou instalar o APK.');
     } finally {
       setLoadingUpdate(false);
-    }
-  };
-
-  const carregarDados = async () => {
-    try {
-      const savedEventos = await AsyncStorage.getItem('@eventos_fixos');
-      const savedCustom = await AsyncStorage.getItem('@eventos_custom');
-      const savedCooldowns = await AsyncStorage.getItem('@cooldowns_state');
-
-      if (savedEventos) setEventos(JSON.parse(savedEventos));
-      if (savedCustom) setEventosCustom(JSON.parse(savedCustom));
-
-      if (savedCooldowns) {
-        const parsed: Record<string, CooldownState> = JSON.parse(savedCooldowns);
-        const agoraMs = Date.now();
-        const revalidados: Record<string, CooldownState> = {};
-
-        Object.keys(parsed).forEach((key) => {
-          const item = parsed[key];
-          if (item && item.ativo) {
-            const restante = Math.max(0, Math.ceil((item.fimTimestamp - agoraMs) / 1000));
-            revalidados[key] = {
-              ...item,
-              ativo: restante > 0,
-              tempoRestante: restante
-            };
-          }
-        });
-
-        setCooldowns(revalidados);
-      }
-    } catch (e) {
-      console.warn('Erro ao carregar dados locais:', e);
     }
   };
 
@@ -331,7 +369,7 @@ export default function App(): React.JSX.Element {
         const hora = parseInt(hStr, 10);
         const minuto = parseInt(mStr, 10);
 
-        // --- ALARME 5 MINUTOS ANTES ---
+        // 5 MINUTOS ANTES
         const dataAlvo5m = new Date(agoraRef);
         dataAlvo5m.setHours(hora, minuto - 5, 0, 0);
         if (dataAlvo5m.getTime() <= agoraRef.getTime()) {
@@ -344,7 +382,7 @@ export default function App(): React.JSX.Element {
           canalUsado
         );
 
-        // --- ALARME 1 MINUTO ANTES ---
+        // 1 MINUTO ANTES
         const dataAlvo1m = new Date(agoraRef);
         dataAlvo1m.setHours(hora, minuto - 1, 0, 0);
         if (dataAlvo1m.getTime() <= agoraRef.getTime()) {
@@ -357,7 +395,7 @@ export default function App(): React.JSX.Element {
           canalUsado
         );
 
-        // --- ALARME NO EXATO MOMENTO (0m) ---
+        // EXATO MOMENTO (0m)
         const dataAlvo0m = new Date(agoraRef);
         dataAlvo0m.setHours(hora, minuto, 0, 0);
         if (dataAlvo0m.getTime() <= agoraRef.getTime()) {
@@ -371,6 +409,34 @@ export default function App(): React.JSX.Element {
         );
       }
     }
+  };
+
+  const abrirEdicaoEvento = (ev: EventoFixo) => {
+    setEventoEmEdicao(ev);
+    setEditNome(ev.nome);
+    setEditInicio(ev.inicio);
+    setModalEditVisible(true);
+  };
+
+  const salvarEdicaoEvento = () => {
+    if (!eventoEmEdicao) return;
+    if (!editNome.trim() || !editInicio.trim() || !editInicio.includes(':')) {
+      Alert.alert('Erro', 'Por favor informe um nome válido e o horário no formato HH:MM.');
+      return;
+    }
+
+    const novas = eventos.map((ev) => {
+      if (ev.id === eventoEmEdicao.id) {
+        return { ...ev, nome: editNome.trim(), inicio: editInicio.trim() };
+      }
+      return ev;
+    });
+
+    salvarEventosFixos(novas);
+    agendarEventosAtivos(novas);
+    setModalEditVisible(false);
+    setEventoEmEdicao(null);
+    Alert.alert('Sucesso', 'Evento fixo atualizado com sucesso!');
   };
 
   const cancelarNotificacao = async (id: string | null | undefined): Promise<void> => {
@@ -602,7 +668,7 @@ export default function App(): React.JSX.Element {
     const dataInicioHoje = new Date(agora);
     dataInicioHoje.setHours(hIni, mIni, 0, 0);
 
-    const [hFim, mFim] = (ev.tipo === 'duracao' ? ev.fim : ev.inicio).split(':').map(Number);
+    const [hFim, mFim] = (ev.tipo === 'duracao' ? (ev.fim || ev.inicio) : ev.inicio).split(':').map(Number);
     const dataFimHoje = new Date(agora);
     if (ev.tipo === 'duracao') {
       dataFimHoje.setHours(hFim, mFim, 0, 0);
@@ -646,23 +712,11 @@ export default function App(): React.JSX.Element {
     return `${h}:${m}:${s}`;
   };
 
-  const getSubAbaBtnStyle = (nomeAba: string): ViewStyle[] => {
-    return subAba === nomeAba ? [styles.subAbaBtn, styles.subAbaBtnAtivo] : [styles.subAbaBtn];
-  };
-
-  const getSubAbaTextoStyle = (nomeAba: string): TextStyle[] => {
-    return subAba === nomeAba ? [styles.subAbaTexto, styles.subAbaTextoAtivo] : [styles.subAbaTexto];
-  };
-
-  const getNavTextStyle = (nomeAba: string): TextStyle[] => {
-    return abaInferior === nomeAba ? [styles.navText, styles.navTextAtivo] : [styles.navText];
-  };
-
   const renderSubAbaContent = (): React.JSX.Element | null => {
     if (subAba === 'fixos') {
       return (
         <View>
-          <Text style={styles.secaoHeader}>⌛ Timeline de Eventos Diários:</Text>
+          <Text style={[styles.secaoHeader, { color: theme.text }]}>⌛ Timeline de Eventos Diários:</Text>
           <View style={styles.timelineBox}>
             {eventos.map((ev) => {
               const infoStatus = getStatusEvento(ev);
@@ -682,10 +736,15 @@ export default function App(): React.JSX.Element {
               }
 
               return (
-                <View key={ev.id} style={styles.cardTimeline}>
+                <View key={ev.id} style={[styles.cardTimeline, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   <View style={styles.cardTimelineInfo}>
-                    <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                    <Text style={styles.cardHorario}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.cardTitulo, { color: theme.text }]}>{ev.nome}</Text>
+                      <TouchableOpacity onPress={() => abrirEdicaoEvento(ev)} style={{ marginLeft: 8, padding: 4 }}>
+                        <Text style={{ fontSize: 14 }}>✏️</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={[styles.cardHorario, { color: theme.subtext }]}>
                       ⏰ {ev.tipo === 'duracao' ? `${ev.inicio} - ${ev.fim}` : ev.inicio}
                     </Text>
                     {Boolean(ev.aviso) && (
@@ -700,7 +759,7 @@ export default function App(): React.JSX.Element {
             })}
           </View>
 
-          <Text style={styles.secaoHeader}>⚡ Notificações Automáticas (5m, 1m e Início):</Text>
+          <Text style={[styles.secaoHeader, { color: theme.text }]}>⚡ Notificações Automáticas (5m, 1m e Início):</Text>
           <View style={styles.botoesAcaoRow}>
             <TouchableOpacity
               style={styles.btnAtivarTodas}
@@ -725,10 +784,15 @@ export default function App(): React.JSX.Element {
           </View>
 
           {eventos.map((ev) => (
-            <View key={ev.id} style={styles.cardToggle}>
+            <View key={ev.id} style={[styles.cardToggle, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.cardTimelineInfo}>
-                <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                <Text style={styles.cardSub}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.cardTitulo, { color: theme.text }]}>{ev.nome}</Text>
+                  <TouchableOpacity onPress={() => abrirEdicaoEvento(ev)} style={{ marginLeft: 8, padding: 4 }}>
+                    <Text style={{ fontSize: 14 }}>✏️</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.cardSub, { color: theme.subtext }]}>
                   Horário: {ev.tipo === 'duracao' ? `${ev.inicio} às ${ev.fim}` : ev.inicio}
                 </Text>
                 <Text style={styles.cardNotiInfo}>⚡ Notifica 5m, 1m antes e no início</Text>
@@ -752,8 +816,8 @@ export default function App(): React.JSX.Element {
     if (subAba === 'sistema') {
       return (
         <View>
-          <Text style={styles.secaoHeader}>⏳ Controle de Cooldowns de Guilda:</Text>
-          <Text style={styles.subTituloInstrucao}>
+          <Text style={[styles.secaoHeader, { color: theme.text }]}>⏳ Controle de Cooldowns de Guilda:</Text>
+          <Text style={[styles.subTituloInstrucao, { color: theme.subtext }]}>
             Insira o horário de entrada manual para calcular o tempo retroativo ou ative os alertas diretamente.
           </Text>
 
@@ -762,12 +826,12 @@ export default function App(): React.JSX.Element {
             const info24h = cooldowns[`${slot}_24h`] || { ativo: false, tempoRestante: 0 };
 
             return (
-              <View key={slot} style={styles.cardSystemSlot}>
-                <Text style={styles.cardTitulo}>Slot {slot}</Text>
+              <View key={slot} style={[styles.cardSystemSlot, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[styles.cardTitulo, { color: theme.text }]}>Slot {slot}</Text>
 
                 <View style={styles.rowManualInput}>
                   <TextInput
-                    style={styles.inputManual}
+                    style={[styles.inputManual, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.inputBorder }]}
                     placeholder="Ex: 1430 (14:30)"
                     placeholderTextColor="#64748B"
                     value={horariosManuais[slot] || ''}
@@ -788,8 +852,8 @@ export default function App(): React.JSX.Element {
 
                 <View style={styles.rowSystemControl}>
                   <View style={styles.cardTimelineInfo}>
-                    <Text style={styles.cardSubLabel}>Cooldown Guilda (1h01m)</Text>
-                    <Text style={info1h.ativo ? styles.cardTimerAtivo : styles.cardSub}>
+                    <Text style={[styles.cardSubLabel, { color: theme.subtext }]}>Cooldown Guilda (1h01m)</Text>
+                    <Text style={info1h.ativo ? styles.cardTimerAtivo : [styles.cardSub, { color: theme.subtext }]}>
                       {info1h.ativo ? `⏳ ${formatarTempo(info1h.tempoRestante)}` : 'Inativo'}
                     </Text>
                   </View>
@@ -801,10 +865,10 @@ export default function App(): React.JSX.Element {
                   />
                 </View>
 
-                <View style={styles.rowSystemControlDivider}>
+                <View style={[styles.rowSystemControlDivider, { borderTopColor: theme.border }]}>
                   <View style={styles.cardTimelineInfo}>
-                    <Text style={styles.cardSubLabel}>Alerta Final (24h)</Text>
-                    <Text style={info24h.ativo ? styles.cardTimerAtivo24 : styles.cardSub}>
+                    <Text style={[styles.cardSubLabel, { color: theme.subtext }]}>Alerta Final (24h)</Text>
+                    <Text style={info24h.ativo ? styles.cardTimerAtivo24 : [styles.cardSub, { color: theme.subtext }]}>
                       {info24h.ativo ? `⌛ ${formatarTempo(info24h.tempoRestante)}` : 'Inativo'}
                     </Text>
                   </View>
@@ -825,18 +889,18 @@ export default function App(): React.JSX.Element {
     if (subAba === 'custom') {
       return (
         <View>
-          <Text style={styles.secaoHeader}>🛠️ Criar Alerta Customizado:</Text>
+          <Text style={[styles.secaoHeader, { color: theme.text }]}>🛠️ Criar Alerta Customizado:</Text>
 
-          <View style={styles.formCustomBox}>
+          <View style={[styles.formCustomBox, { backgroundColor: theme.card }]}>
             <TextInput
-              style={styles.inputCustom}
+              style={[styles.inputCustom, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.inputBorder }]}
               placeholder="Nome do Evento (ex: Floresta Rica)"
               placeholderTextColor="#64748B"
               value={novoNome}
               onChangeText={setNovoNome}
             />
             <TextInput
-              style={styles.inputCustom}
+              style={[styles.inputCustom, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.inputBorder }]}
               placeholder="Horário exato (ex: 2030 vira 20:30)"
               placeholderTextColor="#64748B"
               value={novoHorario}
@@ -849,15 +913,15 @@ export default function App(): React.JSX.Element {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.secaoHeader}>📋 Seus Eventos Customizados:</Text>
+          <Text style={[styles.secaoHeader, { color: theme.text }]}>📋 Seus Eventos Customizados:</Text>
           {eventosCustom.length === 0 ? (
-            <Text style={styles.abaVaziaTexto}>Nenhum evento customizado adicionado.</Text>
+            <Text style={[styles.abaVaziaTexto, { color: theme.subtext }]}>Nenhum evento customizado adicionado.</Text>
           ) : (
             eventosCustom.map((ev) => (
-              <View key={ev.id} style={styles.cardToggle}>
+              <View key={ev.id} style={[styles.cardToggle, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <View style={styles.cardTimelineInfo}>
-                  <Text style={styles.cardTitulo}>{ev.nome}</Text>
-                  <Text style={styles.cardSub}>Horário: {ev.horario}</Text>
+                  <Text style={[styles.cardTitulo, { color: theme.text }]}>{ev.nome}</Text>
+                  <Text style={[styles.cardSub, { color: theme.subtext }]}>Horário: {ev.horario}</Text>
                 </View>
                 <TouchableOpacity onPress={() => removerEventoCustom(ev)} style={styles.btnDeletar}>
                   <Text style={styles.btnDeletarTexto}>🗑️ Excluir</Text>
@@ -873,15 +937,20 @@ export default function App(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.header} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.header }]}>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerEmoji}>🛡️</Text>
-          <Text style={styles.headerTitle}>Alertas Poke Membros Guilda Brasil</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Alertas Poke Membros</Text>
         </View>
-        <View style={styles.clockBox}>
+
+        <TouchableOpacity onPress={alternarTema} style={{ marginRight: 10, padding: 4 }}>
+          <Text style={{ fontSize: 18 }}>{isDarkMode ? '☀️' : '🌙'}</Text>
+        </TouchableOpacity>
+
+        <View style={[styles.clockBox, { backgroundColor: theme.bg }]}>
           <Text style={styles.clockIcon}>🕒</Text>
           <Text style={styles.clockText}>{formatarRelogioDigital(agora)}</Text>
         </View>
@@ -889,29 +958,29 @@ export default function App(): React.JSX.Element {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {abaInferior === 'gerador' && (
-          <View style={styles.painelContainer}>
-            <Text style={styles.painelTitulo}>🔔 Painel de Notificações</Text>
+          <View style={[styles.painelContainer, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+            <Text style={[styles.painelTitulo, { color: theme.text }]}>🔔 Painel de Notificações</Text>
 
-            <View style={styles.subAbasContainer}>
+            <View style={[styles.subAbasContainer, { backgroundColor: theme.bg }]}>
               <TouchableOpacity
-                style={getSubAbaBtnStyle('fixos')}
+                style={[styles.subAbaBtn, subAba === 'fixos' && styles.subAbaBtnAtivo]}
                 onPress={() => setSubAba('fixos')}
               >
-                <Text style={getSubAbaTextoStyle('fixos')}>Eventos Fixos</Text>
+                <Text style={[styles.subAbaTexto, subAba === 'fixos' && styles.subAbaTextoAtivo]}>Eventos Fixos</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={getSubAbaBtnStyle('sistema')}
+                style={[styles.subAbaBtn, subAba === 'sistema' && styles.subAbaBtnAtivo]}
                 onPress={() => setSubAba('sistema')}
               >
-                <Text style={getSubAbaTextoStyle('sistema')}>Sistema</Text>
+                <Text style={[styles.subAbaTexto, subAba === 'sistema' && styles.subAbaTextoAtivo]}>Sistema</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={getSubAbaBtnStyle('custom')}
+                style={[styles.subAbaBtn, subAba === 'custom' && styles.subAbaBtnAtivo]}
                 onPress={() => setSubAba('custom')}
               >
-                <Text style={getSubAbaTextoStyle('custom')}>Customizável</Text>
+                <Text style={[styles.subAbaTexto, subAba === 'custom' && styles.subAbaTextoAtivo]}>Customizável</Text>
               </TouchableOpacity>
             </View>
 
@@ -920,110 +989,213 @@ export default function App(): React.JSX.Element {
         )}
 
         {abaInferior === 'dev' && (
-          <View style={styles.painelContainer}>
-            <Text style={styles.painelTitulo}>⚙️ Modos & Testes Dev</Text>
+          <View style={[styles.painelContainer, { backgroundColor: theme.panel, borderColor: theme.border }]}>
+            <Text style={[styles.painelTitulo, { color: theme.text }]}>⚙️ Central do Desenvolvedor</Text>
 
-            <View style={styles.cardSystemSlot}>
-              <Text style={styles.cardTitulo}>Atualização do App (GitHub Release)</Text>
-              <Text style={styles.cardSubLabel}>
-                Baixa e instala o arquivo APK completo publicado na aba Releases do seu repositório.
-              </Text>
-
+            <View style={[styles.subAbasContainer, { backgroundColor: theme.bg }]}>
               <TouchableOpacity
-                style={[
-                  styles.btnAdicionarCustom,
-                  { marginTop: 10, backgroundColor: '#059669' }
-                ]}
-                onPress={() => checarEInstalarAPK(false)}
-                disabled={loadingUpdate}
+                style={[styles.subAbaBtn, subAbaDev === 'geral' && styles.subAbaBtnAtivo]}
+                onPress={() => setSubAbaDev('geral')}
               >
-                {loadingUpdate ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.btnAcaoTexto}>🚀 Baixar e Instalar Último APK</Text>
-                )}
+                <Text style={[styles.subAbaTexto, subAbaDev === 'geral' && styles.subAbaTextoAtivo]}>Geral & Build</Text>
               </TouchableOpacity>
 
-              <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#2A365C' }}>
-                <Text style={{ color: '#E2E8F0', fontSize: 12, fontWeight: '500' }}>
-                  {statusUpdate}
-                </Text>
+              <TouchableOpacity
+                style={[styles.subAbaBtn, subAbaDev === 'testes' && styles.subAbaBtnAtivo]}
+                onPress={() => setSubAbaDev('testes')}
+              >
+                <Text style={[styles.subAbaTexto, subAbaDev === 'testes' && styles.subAbaTextoAtivo]}>🧪 Testes</Text>
+              </TouchableOpacity>
+            </View>
 
-                {releaseDataHora && (
-                  <Text style={{ color: '#38BDF8', fontSize: 12, marginTop: 4, fontWeight: '600' }}>
-                    📅 Lançamento do APK disponível: {releaseDataHora}
+            {subAbaDev === 'geral' && (
+              <View>
+                <View style={[styles.cardSystemSlot, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.cardTitulo, { color: theme.text }]}>Atualização do App (GitHub Release)</Text>
+                  <Text style={[styles.cardSubLabel, { color: theme.subtext }]}>
+                    Baixa e instala o arquivo APK publicado na release do seu repositório.
                   </Text>
-                )}
+
+                  <TouchableOpacity
+                    style={[styles.btnAdicionarCustom, { marginTop: 10, backgroundColor: '#059669' }]}
+                    onPress={() => checarEInstalarAPK(false)}
+                    disabled={loadingUpdate}
+                  >
+                    {loadingUpdate ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <Text style={styles.btnAcaoTexto}>🚀 Baixar e Instalar Último APK</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.border }}>
+                    <Text style={{ color: theme.text, fontSize: 12, fontWeight: '500' }}>
+                      {statusUpdate}
+                    </Text>
+
+                    {releaseDataHora && (
+                      <Text style={{ color: '#38BDF8', fontSize: 12, marginTop: 4, fontWeight: '600' }}>
+                        📅 Lançamento do APK disponível: {releaseDataHora}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={[styles.cardSystemSlot, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.cardTitulo, { color: theme.text }]}>Canal de Alertas Críticos (DND)</Text>
+                  <Text style={[styles.cardSubLabel, { color: theme.subtext }]}>
+                    Se ativo, novos alertas agendados usarão o canal crítico (vibração + furar Não Perturbe).
+                  </Text>
+
+                  <View style={styles.rowSystemControl}>
+                    <Text style={[styles.cardSub, { color: theme.subtext }]}>Furar Não Perturbe</Text>
+                    <Switch
+                      value={modoDndAtivo}
+                      onValueChange={setModoDndAtivo}
+                      trackColor={{ false: '#334155', true: '#EF4444' }}
+                      thumbColor={modoDndAtivo ? '#F87171' : '#94A3B8'}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.btnAdicionarCustom, { marginTop: 12, backgroundColor: '#334155' }]}
+                    onPress={abrirConfiguracoesDnd}
+                  >
+                    <Text style={styles.btnAcaoTexto}>📲 Abrir Permissões no Android</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            )}
 
-            <View style={styles.cardSystemSlot}>
-              <Text style={styles.cardTitulo}>Canal de Alertas Críticos (DND)</Text>
-              <Text style={styles.cardSubLabel}>
-                Se ativo, novos alertas agendados usarão o canal crítico (vibração + furar Não Perturbe).
-              </Text>
+            {subAbaDev === 'testes' && (
+              <View>
+                <View style={[styles.cardSystemSlot, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[styles.cardTitulo, { color: theme.text }]}>🧪 Teste de Notificação de Eventos Fixos</Text>
+                  <Text style={[styles.cardSubLabel, { color: theme.subtext, marginBottom: 10 }]}>
+                    Dispara um alerta imediato no padrão dos eventos fixos para verificar o som e a notificação visual.
+                  </Text>
 
-              <View style={styles.rowSystemControl}>
-                <Text style={styles.cardSub}>Furar Não Perturbe</Text>
-                <Switch
-                  value={modoDndAtivo}
-                  onValueChange={setModoDndAtivo}
-                  trackColor={{ false: '#334155', true: '#EF4444' }}
-                  thumbColor={modoDndAtivo ? '#F87171' : '#94A3B8'}
-                />
+                  <TouchableOpacity
+                    style={[styles.btnAdicionarCustom, { backgroundColor: '#10B981', marginBottom: 10 }]}
+                    onPress={() => {
+                      const dataTeste = new Date(Date.now() + 3000);
+                      const canal = modoDndAtivo ? 'channel_critical_alerts' : 'default';
+                      agendarNotificacaoExata(
+                        'Alertas Poke Membros - Boss (INICIOU)',
+                        'O evento Boss começou agora! [TESTE]',
+                        dataTeste,
+                        canal
+                      );
+                      Alert.alert('Teste Agendado', 'A notificação de Evento Fixo vai tocar em 3 segundos. Bloqueie a tela ou vá para a Home!');
+                    }}
+                  >
+                    <Text style={styles.btnAcaoTexto}>🔔 Testar Notificação de Evento Fixo (3s)</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.btnAdicionarCustom, { backgroundColor: '#2563EB' }]}
+                    onPress={() => {
+                      const dataTeste = new Date(Date.now() + 3000);
+                      const canal = modoDndAtivo ? 'channel_critical_alerts' : 'default';
+                      agendarNotificacaoExata(
+                        '⚡ Teste Alerta Geral',
+                        'Notificação de teste executada com sucesso!',
+                        dataTeste,
+                        canal
+                      );
+                      Alert.alert('Teste Agendado', 'Notificação genérica em 3 segundos.');
+                    }}
+                  >
+                    <Text style={styles.btnAcaoTexto}>🚀 Testar Alerta Genérico (3s)</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-
-              <TouchableOpacity
-                style={[styles.btnAdicionarCustom, { marginTop: 12, backgroundColor: '#334155' }]}
-                onPress={abrirConfiguracoesDnd}
-              >
-                <Text style={styles.btnAcaoTexto}>📲 Abrir Permissões no Android</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.btnAdicionarCustom, { backgroundColor: '#2563EB', marginTop: 10 }]}
-              onPress={() => {
-                const d = new Date(Date.now() + 3000);
-                agendarNotificacaoExata('⚡ Teste Dev', 'Testando alerta em 3 segundos!', d, modoDndAtivo ? 'channel_critical_alerts' : 'default');
-              }}
-            >
-              <Text style={styles.btnAcaoTexto}>🚀 Disparar Notificação de Teste (3s)</Text>
-            </TouchableOpacity>
+            )}
           </View>
         )}
 
         {abaInferior !== 'gerador' && abaInferior !== 'dev' && (
           <View style={styles.abaVaziaContainer}>
-            <Text style={styles.abaVaziaTexto}>Tela: {abaInferior.toUpperCase()}</Text>
+            <Text style={[styles.abaVaziaTexto, { color: theme.subtext }]}>Tela: {abaInferior.toUpperCase()}</Text>
           </View>
         )}
       </ScrollView>
 
-      <View style={styles.navBottom}>
+      {/* Modal de Edição de Evento Fixo */}
+      <Modal
+        visible={modalEditVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalEditVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.modalTitulo, { color: theme.text }]}>✏️ Editar Evento Fixo</Text>
+
+            <Text style={[styles.inputLabel, { color: theme.subtext }]}>Nome do Evento:</Text>
+            <TextInput
+              style={[styles.inputCustom, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.inputBorder }]}
+              value={editNome}
+              onChangeText={setEditNome}
+              placeholder="Nome"
+              placeholderTextColor="#64748B"
+            />
+
+            <Text style={[styles.inputLabel, { color: theme.subtext }]}>Horário de Início (HH:MM):</Text>
+            <TextInput
+              style={[styles.inputCustom, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.inputBorder }]}
+              value={editInicio}
+              onChangeText={(val) => setEditInicio(formatarEntradaHora(val))}
+              placeholder="Ex: 16:00"
+              placeholderTextColor="#64748B"
+              keyboardType="numeric"
+              maxLength={5}
+            />
+
+            <View style={styles.modalBotoesRow}>
+              <TouchableOpacity
+                style={[styles.btnModal, { backgroundColor: '#334155' }]}
+                onPress={() => setModalEditVisible(false)}
+              >
+                <Text style={styles.btnAcaoTexto}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.btnModal, { backgroundColor: '#059669' }]}
+                onPress={salvarEdicaoEvento}
+              >
+                <Text style={styles.btnAcaoTexto}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Navegação Inferior */}
+      <View style={[styles.navBottom, { backgroundColor: theme.header, borderTopColor: theme.border }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('gerador')}>
           <Text style={styles.navIcon}>⚡</Text>
-          <Text style={getNavTextStyle('gerador')}>Gerador</Text>
+          <Text style={abaInferior === 'gerador' ? styles.navTextAtivo : styles.navText}>Gerador</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('pessoas')}>
           <Text style={styles.navIcon}>👥</Text>
-          <Text style={getNavTextStyle('pessoas')}>Pessoas</Text>
+          <Text style={abaInferior === 'pessoas' ? styles.navTextAtivo : styles.navText}>Pessoas</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('historico')}>
           <Text style={styles.navIcon}>📜</Text>
-          <Text style={getNavTextStyle('historico')}>Histórico</Text>
+          <Text style={abaInferior === 'historico' ? styles.navTextAtivo : styles.navText}>Histórico</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('guilda')}>
           <Text style={styles.navIcon}>🏰</Text>
-          <Text style={getNavTextStyle('guilda')}>Guilda</Text>
+          <Text style={abaInferior === 'guilda' ? styles.navTextAtivo : styles.navText}>Guilda</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => setAbaInferior('dev')}>
           <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={getNavTextStyle('dev')}>Dev</Text>
+          <Text style={abaInferior === 'dev' ? styles.navTextAtivo : styles.navText}>Dev</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -1033,12 +1205,10 @@ export default function App(): React.JSX.Element {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B132B'
   },
   header: {
     paddingHorizontal: 12,
     paddingVertical: 14,
-    backgroundColor: '#1C2541',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
@@ -1054,7 +1224,6 @@ const styles = StyleSheet.create({
     marginRight: 6
   },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: 'bold',
     flexShrink: 1
@@ -1062,7 +1231,6 @@ const styles = StyleSheet.create({
   clockBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0B132B',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -1084,21 +1252,17 @@ const styles = StyleSheet.create({
     paddingBottom: 80
   },
   painelContainer: {
-    backgroundColor: '#111C38',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#1E293B'
   },
   painelTitulo: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12
   },
   subAbasContainer: {
     flexDirection: 'row',
-    backgroundColor: '#0B132B',
     borderRadius: 8,
     padding: 4,
     marginBottom: 16
@@ -1121,14 +1285,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF'
   },
   secaoHeader: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginTop: 8,
     marginBottom: 10
   },
   subTituloInstrucao: {
-    color: '#94A3B8',
     fontSize: 12,
     marginBottom: 12
   },
@@ -1136,7 +1298,6 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   cardTimeline: {
-    backgroundColor: '#1C2541',
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
@@ -1144,18 +1305,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2A365C'
   },
   cardTimelineInfo: {
     flex: 1
   },
   cardTitulo: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold'
   },
   cardHorario: {
-    color: '#94A3B8',
     fontSize: 12,
     marginTop: 4
   },
@@ -1234,10 +1392,10 @@ const styles = StyleSheet.create({
   btnAcaoTexto: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 13
+    fontSize: 13,
+    textAlign: 'center'
   },
   cardToggle: {
-    backgroundColor: '#1C2541',
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
@@ -1245,15 +1403,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2A365C'
   },
   cardSystemSlot: {
-    backgroundColor: '#1C2541',
     borderRadius: 8,
     padding: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#2A365C'
   },
   rowManualInput: {
     flexDirection: 'row',
@@ -1263,14 +1418,11 @@ const styles = StyleSheet.create({
   },
   inputManual: {
     flex: 1,
-    backgroundColor: '#0B132B',
-    color: '#FFFFFF',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
     fontSize: 12,
     borderWidth: 1,
-    borderColor: '#334155',
     marginRight: 8
   },
   btnManual: {
@@ -1296,15 +1448,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#2A365C',
     paddingTop: 8
   },
   cardSubLabel: {
-    color: '#94A3B8',
     fontSize: 12
   },
   cardSub: {
-    color: '#64748B',
     fontSize: 12,
     marginTop: 2
   },
@@ -1326,20 +1475,16 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   formCustomBox: {
-    backgroundColor: '#1C2541',
     padding: 12,
     borderRadius: 8,
     marginBottom: 16
   },
   inputCustom: {
-    backgroundColor: '#0B132B',
-    color: '#FFFFFF',
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#334155'
+    borderWidth: 1
   },
   btnAdicionarCustom: {
     backgroundColor: '#2563EB',
@@ -1363,7 +1508,6 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   abaVaziaTexto: {
-    color: '#94A3B8',
     fontSize: 13,
     textAlign: 'center'
   },
@@ -1373,9 +1517,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#0B132B',
     borderTopWidth: 1,
-    borderTopColor: '#1E293B',
     paddingVertical: 8
   },
   navItem: {
@@ -1392,6 +1534,42 @@ const styles = StyleSheet.create({
   },
   navTextAtivo: {
     color: '#3B82F6',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    fontSize: 10,
+    marginTop: 2
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  modalBox: {
+    width: '100%',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1
+  },
+  modalTitulo: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 14
+  },
+  inputLabel: {
+    fontSize: 12,
+    marginBottom: 4
+  },
+  modalBotoesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10
+  },
+  btnModal: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 6,
+    marginHorizontal: 4,
+    alignItems: 'center'
   }
 });
